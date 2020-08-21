@@ -1,0 +1,12 @@
+name: NLP_Final
+title: NLP_Final
+username:
+account: juan-izurieta
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2692533
+bundleId: 3541269
+url: https://juan-izurieta.shinyapps.io/NLP_Final/
+when: 1598005165.07638
+asMultiple: FALSE
+asStatic: FALSE
