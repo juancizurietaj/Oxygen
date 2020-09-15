@@ -1,0 +1,285 @@
+---
+title:    "Natural Language Processing from files"
+subtitle: "Oxygen ML module for NLP and sentiment analysis"
+date:     "August 20th 2020"
+urlcolor: gray
+output:
+  html_document: 
+    theme:        united 
+    highlight:    pygments
+    toc:          TRUE
+    toc_float:    TRUE
+    code_folding: show
+    includes:
+    after_body:   footer.html
+  pdf_document:   default
+  epuRate::epurate:
+    number_sections: FALSE
+    code_folding:    "show"
+    toc:          TRUE 
+    word_document:  default
+  rmdformats::readthedown:
+    toc:          TRUE 
+    toc_float:    TRUE     
+---
+
+```{js logo-js, echo=FALSE}
+$(document).ready(function() {
+  $('#header').parent().prepend('<div id=\"logo\"><img src=\"https://drive.google.com/uc?id=1daMjDA9V2WhZUqS4iyatXxBVg7MvJAZt" style=\"position:absolute; top:0; right:0; padding:20px; height:120px\"></div>');
+  $('#header').css('margin-right', '120px')
+});
+```
+
+
+```{r libraries, message=FALSE, warning=FALSE}
+# Shiny
+library(shiny)
+library(shinythemes)
+library(shinyWidgets)
+
+# Sentiment
+library(sentimentr)
+library(syuzhet)
+
+# Dates
+library(lubridate)
+
+# Visualization
+library(DT)
+library(plotly)
+library(viridis)
+library(hrbrthemes)
+library(magrittr)
+library(networkD3)
+
+# Animation
+library(gganimate)
+library(gifski)
+
+# Core
+library(data.table)
+library(tidyverse)
+library(tidyquant)
+
+# NLP
+library(udpipe)
+```
+
+# Get the data
+```{r}
+data <- fread("Data/Hotel_reviews_sample2.csv", encoding = "UTF-8")
+str(data)
+```
+
+# Clean the data
+It's important to remove hashtags, tags, urls, html code and other text features. The textclean library is quite easy to use, and also faster than other text replacement functions, for example gsub, but only in big chunks of texts. For tweets, gsub performs better than textclean, but is more difficult to get the appropiate regular expressions for all the changes.
+
+```{r clean_texts_gsub}
+
+selected_data <- data.frame(text = data$Review, id = seq(1, nrow(data)), 1, score = data$Reviewer_Score)
+
+selected_data$text_clean <- gsub("&amp", "", selected_data$text)
+selected_data$text_clean <- gsub("&amp", "", selected_data$text)
+selected_data$text_clean <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", selected_data$text)
+selected_data$text_clean <- gsub("@\\w+", "", selected_data$text)
+selected_data$text_clean <- gsub("[[:punct:]]", "", selected_data$text)
+selected_data$text_clean <- gsub("[[:digit:]]", "", selected_data$text)
+selected_data$text_clean <- gsub("http\\w+", "", selected_data$text)
+selected_data$text_clean <- gsub("[ \t]{2,}", "", selected_data$text)
+selected_data$text_clean <- gsub("^\\s+|\\s+$", "", selected_data$text)
+
+selected_data$text_clean <- iconv(selected_data$text_clean, "UTF-8", "ASCII", sub="")
+selected_data$text_clean <- tolower(selected_data$text_clean)
+
+```
+
+
+# Get sentiment
+
+```{r get_sentiment}
+sentiments <- selected_data %>% mutate(text_split = get_sentences(text_clean)) %$% sentiment_by(text_split, list(id, text, text_clean, score))
+
+sentiments
+```
+
+# Sentiments using syuzhet library
+
+```{r syuzhet_emotions}
+emotions <- get_nrc_sentiment(selected_data$text_clean)
+emotions$id <- selected_data$id
+emotions <- left_join(emotions, select(selected_data, c(id, text_clean)), by = "id")
+```
+
+```{r}
+names(emotions)
+```
+
+
+```{r plot_syushet_emotions}
+label_wrap <- label_wrap_gen(width = 60)
+g <- ggplot(emotions, aes(x=id, y=anger, col=anger)) + geom_point(aes(text = str_glue("id: {id}
+                                       <b>Average sentiment:</b> {anger}
+                                       <b>Text:</b> {label_wrap(text_clean)}"))) + geom_smooth(method = "loess", color = "cornflowerblue") + scale_color_viridis(option="plasma")
+
+ggplotly(g)
+```
+
+
+```{r syuzhet_sentiments}
+sentiments <- data.frame(id = selected_data$id, text = selected_data$text, score = selected_data$score, ave_sentiment = get_sentiment(selected_data$text_clean), stringsAsFactors = F)
+sentiments
+```
+
+
+# Get texts polarity
+
+```{r}
+polarity <- sentiments %>% 
+  mutate(polarity_level = factor(ifelse(ave_sentiment < 0, "Negative",
+                                 ifelse(ave_sentiment > 0, "Positive","Neutral"))))
+
+```
+
+# Plot sentiment averages
+
+```{r plot_sentiment}
+label_wrap <- label_wrap_gen(width = 60)
+g <- polarity %>%
+  ggplot(aes(x=id, y=ave_sentiment, size = score, color = ave_sentiment)) +
+    geom_point(alpha=0.9,
+               aes(text = str_glue("<b>Score:</b> {score} 
+                                   <b>Sentiment score:</b> {round(ave_sentiment,2)}
+                                      <b>Text:</b> {label_wrap(text)}"))) +
+    geom_hline(aes(yintercept = mean(ave_sentiment)), color = "black") +
+    geom_hline(aes(yintercept = median(ave_sentiment) + 1.96*IQR(ave_sentiment)), color = "#ffd633") +
+    geom_hline(aes(yintercept = median(ave_sentiment) - 1.96*IQR(ave_sentiment)), color = "#600080") +
+    scale_size(range = c(.1, 4)) +
+    scale_color_viridis(option="plasma") +
+    theme_ipsum() +
+    theme(legend.position = "none") +
+    ggtitle("Average sentiment of texts") +
+    ylab("Average sentiment") +
+    xlab("Texts")
+
+ggplotly(g, tooltip = "text") 
+```
+
+
+
+# Get emotions
+
+```{r get_emotions}
+
+emotion <- selected_data %>% get_sentences(selected_data$text_clean) %>% emotion(drop.unused.emotions = TRUE)
+
+```
+# Plot emotions in time
+
+```{r plot_emotions}
+emotion_ordered <- arrange(emotion)
+g <- plot(emotion_ordered, facet = FALSE)
+ggplotly(g, tooltip = c("emotion"))
+```
+```{r}
+emotion %>% filter(emotion_type == "sadness")
+```
+
+
+
+# NLP
+
+```{r import_model}
+ud_model <- udpipe_download_model(language = "spanish")
+#saveRDS(ud_model, "ud_model.rds")
+ud_model <- udpipe_load_model(ud_model$file_model)
+
+```
+
+```{r annotate_texts}
+x <- udpipe_annotate(ud_model, x = selected_data$text_clean, id = selected_data$id)
+x <- as.data.frame(x)
+str(x)
+```
+
+```{r plot_common_adjectives}
+# Prepare data:
+stats <- subset(x, upos %in% c("ADJ", "NOUN", "VERB"))
+
+# Prepare for join
+library(stringr)
+regexp <- "[[:digit:]]+"
+stats$id <- as.integer(str_extract(stats$doc_id, regexp))
+
+#stats <- left_join(x=stats, y=selected_data, by = "id")
+stats <- left_join(x=stats, y=select(selected_data, c(id,score)), by = "id")
+
+stats <- filter(stats, score > 4)
+
+stats <- txt_freq(stats$lemma)
+stats$key <- factor(stats$key, levels = rev(stats$key))
+
+# Plot
+g <- ggplot(stats[1:30,], aes(x=key, y=freq)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+    coord_flip() +
+    xlab("") +
+    theme_bw() + 
+    ggtitle("Top 30 most frequent adjectives")
+
+ggplotly(g, tooltip = c("key", "freq"))
+```
+
+```{r}
+str(stats)
+```
+
+
+```{r cooc_table}
+cooc <- cooccurrence(x = subset(x, upos %in% c('NOUN', 'ADJ')), 
+                    term  = 'lemma', 
+                    group = c('doc_id', 'paragraph_id', 'sentence_id'),
+                    skipgram = 3)
+```
+
+
+```{r}
+grapho <- data.frame(from=cooc$term1, to=cooc$term2, cooc=cooc$cooc)
+grapho <- grapho %>% arrange(desc(cooc)) %>% top_n(300)
+grapho
+```
+
+
+
+```{r coocurrences_dynamic}
+library(networkD3)
+grapho <- data.frame(from=cooc$term1[1:200], to=cooc$term2[1:200])
+p <- simpleNetwork(grapho,
+                   height="500px", 
+                   width="700px",
+                   linkDistance = 20,
+                   charge = -100,
+                   fontSize = 14,
+                   fontFamily = "arial",
+                   zoom = T)
+p
+```
+
+```{r concurrences_dynamic_search_term}
+search_term <- c("bed")
+grapho <- data.frame(cooc) %>% filter_all(any_vars(. %in% search_term)) %>% top_n(50)
+p <- simpleNetwork(grapho, 
+                   height="500px", 
+                   width="700px",
+                   linkDistance = 20,
+                   charge = -300,
+                   fontSize = 14,
+                   fontFamily = "arial",
+                   zoom = T)
+p
+```
+
+
+
+
+
+

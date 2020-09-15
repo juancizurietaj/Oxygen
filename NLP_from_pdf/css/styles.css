@@ -1,0 +1,11 @@
+
+#img_pdf {
+    overflow: scroll;
+}
+
+.hovertext text {
+    font-size: 10px !important;
+}
+.legendtext {
+    font-size: 30px !important;
+}

@@ -1,0 +1,299 @@
+---
+title:    "Natural Language Processing"
+subtitle: "Oxygen ML module for pdf scrapping and NLP"
+date:     "August 20th 2020"
+urlcolor: gray
+output:
+  html_document: 
+    theme:        united 
+    highlight:    pygments
+    toc:          TRUE
+    toc_float:    TRUE
+    code_folding: show
+    includes:
+    after_body:   footer.html
+  pdf_document:   default
+  epuRate::epurate:
+    number_sections: FALSE
+    code_folding:    "show"
+    toc:          TRUE 
+    word_document:  default
+  rmdformats::readthedown:
+    toc:          TRUE 
+    toc_float:    TRUE     
+---
+
+```{js logo-js, echo=FALSE}
+$(document).ready(function() {
+  $('#header').parent().prepend('<div id=\"logo\"><img src=\"https://drive.google.com/uc?id=1daMjDA9V2WhZUqS4iyatXxBVg7MvJAZt" style=\"position:absolute; top:0; right:0; padding:20px; height:120px\"></div>');
+  $('#header').css('margin-right', '120px')
+});
+```
+
+```{r libraries message=FALSE, warning=FALSE}
+# Read and extract information from PDFs:
+library(pdftools)
+
+# Generate preview images from PDFs:
+library(magick)
+library(knitr)
+
+# Operativity:
+library(tidyverse)
+library(plotly)
+library(tidyquant)
+library(igraph)
+library(networkD3)
+
+# NLP
+library(udpipe) # For 
+library(sentimentr)
+
+```
+
+
+# Example PDF loading
+We'll use a +10 pages extract from a Donald Trump speech made on Tulsa, US, in July 2020. Full transcript can be found in: https://www.rev.com/blog/transcripts/donald-trump-tulsa-oklahoma-rally-speech-transcript
+
+```{r pdf_load}
+pdf_path <- "Data/obama_speeches.pdf"
+```
+
+The pdftools library can generat metadat information about the document:
+```{r pdf_metadata}
+pdf_metadata <- pdf_info(pdf_path)
+pdf_metadata
+```
+
+Also we can get the document lenght.
+```{r pdf_lenght}
+pdf_lenght <- pdf_length(pdf_path)
+pdf_lenght
+```
+
+Using magick we can get pages previews. Previews can be scaled (this will be useful for Shiny layouts).
+```{r pdf_image_preview}
+# Assign a preview image of a page to a variable
+img_page_1 <- image_read_pdf(pdf_path, pages = 1)
+
+# Resize
+img_page_1 <- img_page_1 %>% image_scale("400")
+img_page_1
+```
+
+# PDF data extraction
+This extracts all text in one vector:
+```{r extract_text_pdf}
+text_data <- pdf_text(pdf_path)
+```
+
+Now, we need to parse the previously created vector into a tibble, assigning page and paragraph numbers.
+```{r parse_text_to_tibble}
+paragraph_text_tbl <- tibble(
+    # Page Text
+    page_text = text_data
+) %>%
+    rowid_to_column(var = "page_num") %>%
+    
+    # Paragraph Text
+    mutate(paragraph_text = str_split(page_text, pattern = "\\.\n")) %>%
+    select(-page_text) %>%
+    unnest(paragraph_text) %>%
+    rowid_to_column(var = "paragraph_num") %>%
+    select(page_num, paragraph_num, paragraph_text)
+    
+```
+
+Let's check a page content:
+```{r}
+paragraph_text_tbl %>%
+    filter(page_num == 7)
+```
+And let's check the correspondent image preview:
+```{r}
+image_read_pdf(pdf_path, pages = 7) %>%
+    image_scale("600")
+```
+# NLP Model
+We'll be using the UDPipe model trained for English. Download should be around 16Mb. We need to download the model and then load it into the session:
+```{r import_model}
+# First time we need to download the model:
+#ud_model <- udpipe_download_model(language = "english")
+
+# Save the model as rds:
+#ud_model <- saveRDS(ud_model, "ud_model.rds")
+
+# Read the rds model:
+ud_model <- readRDS("ud_model.rds")
+
+# Load the dile model object:
+ud_model <- udpipe_load_model(ud_model$file_model)
+```
+
+Annotation is the main process for NLP using udpipe. The udpipe_annotation function will create tokens (elements of text), lemmas (word's stems), upos (type of words, if they're nouns, verbs, etc.). Other features include tenses and compound relationships.
+```{r annotate_table}
+x <- udpipe_annotate(ud_model, x = paragraph_text_tbl$paragraph_text, doc_id = paragraph_text_tbl$paragraph_num)
+x <- as.data.frame(x)
+str(x)
+```
+
+# NLP analysis
+Let's start understanding the most frequent words in the document by its type (UPOS):
+```{r plot_upos}
+# Prepare data:
+stats <- txt_freq(x$upos)
+stats$key <- factor(stats$key, levels = rev(stats$key))
+
+# Plot:
+g <- ggplot(stats, aes(x=key, y=freq)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+    coord_flip() +
+    xlab("") +
+    theme_bw() + 
+    ggtitle("Words type frequency by UPOS (Universal Parts of Speech)")
+
+ggplotly(g, tooltip = c("key", "freq"))
+```
+
+Now let's check only the nouns present in the document. This is easy, just filter the upos variable to include only "NOUN" category.
+
+```{r plot_nouns}
+# Prepare data:
+stats <- subset(x, upos %in% c("NOUN")) 
+stats <- txt_freq(stats$token)
+stats$key <- factor(stats$key, levels = rev(stats$key))
+
+# Plot
+g <- ggplot(stats[1:30,], aes(x=key, y=freq)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+    coord_flip() +
+    xlab("") +
+    theme_bw() + 
+    ggtitle("Top 30 most frequent nouns in document")
+
+ggplotly(g, tooltip = c("key", "freq"))
+```
+
+The same for adjectives: 
+```{r plot_adjectives}
+# Prepare data:
+stats <- subset(x, upos %in% c("ADJ")) 
+stats <- txt_freq(stats$lemma)
+stats$key <- factor(stats$key, levels = rev(stats$key))
+
+# Plot
+g <- ggplot(stats[1:30,], aes(x=key, y=freq)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+    coord_flip() +
+    xlab("") +
+    theme_bw() + 
+    ggtitle("Top 30 more frequent adjectives in document")
+
+ggplotly(g, tooltip = c("key", "freq"))
+```
+And for verbs: 
+
+```{r plot_verbs}
+stats <- subset(x, upos %in% c("VERB")) 
+stats <- txt_freq(stats$lemma)
+stats$key <- factor(stats$key, levels = rev(stats$key))
+
+# Plot
+g <- ggplot(stats[1:30,], aes(x=key, y=freq)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+    coord_flip() +
+    xlab("") +
+    theme_bw() + 
+    ggtitle("Top 30 most frequent verbs in document")
+
+ggplotly(g, tooltip = c("key", "freq"))
+```
+
+
+# RAKE (Rapid Automatic Keyword Extraction)
+Compound words are key to understand the document context and specific terms. The following code extracts compound words (or keywords) by using the RAKE method.
+
+```{r plot_rake}
+stats <- keywords_rake(x = x, term = "lemma", group = "doc_id", 
+                       relevant = x$upos %in% c("NOUN", "ADJ"))
+stats$keyword <- factor(stats$keyword, levels = rev(stats$keyword))
+
+# Plot
+g <- ggplot(stats[1:10,], aes(x=keyword, y=rake)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.7, width=.4) +
+    coord_flip() +
+    ylab("RAKE (Rapid Automatic Keyword Extraction)") +
+    xlab("Palabra compuesta") +
+    theme_bw() + 
+    ggtitle("Top 10 most frequent compound words")
+
+ggplotly(g, tooltip = c("keyword", "rake"))
+
+```
+
+# Co-ocurrences
+Co-ocurrences denote relationships between words. The more frequent two words appear close, the more related the are. The following code creates a data frame for co-ocurrences in the annotated text.
+
+```{r cooc_table}
+cooc <- cooccurrence(x = subset(x, upos %in% c('NOUN', 'ADJ')), 
+                    term  = 'lemma', 
+                    group = c('doc_id', 'paragraph_id', 'sentence_id'))
+```
+
+Using the NetworkD3 library, a dynamic interactive nodes grpah between co-ocurrences can be plotted. It's important to limit the number of co-ocurrences, as there can be thousands depending on the text lenght/style:
+```{r coocurrences_dynamic}
+grapho <- data.frame(from=cooc$term1[1:100], to=cooc$term2[1:100])
+p <- simpleNetwork(grapho, 
+                   height="500px", 
+                   width="700px",
+                   linkDistance = 20,
+                   charge = -100,
+                   fontSize = 14,
+                   fontFamily = "arial",
+                   zoom = T)
+p
+```
+# Sentiment analysis
+Using the Sentimentr library, it's super easy to estimate sentiment. This is true for English texts. For Spanish, as far as I could research, Spacy, which runs on Python, so reticulate Library is needed, would a good option, but it relies on the labelled train corpus for fine tuning. Not a lot of labelled train corpuses in Spanish btw.
+
+The following uses the sentiment_by function to measure the sentiment of the paragraphs. An average sentiment is calculated for the paragraph (ave_sentiment). That's the one we'll use for plotting.
+
+A bit of text glue will be needed for having orientative labels on the plotly chart:
+
+```{r sentiment}
+paragraph_text_tbl <- paragraph_text_tbl %>% 
+  mutate(
+    word_count = sentiment_by(paragraph_text_tbl$paragraph_text)$word_count,
+    sd = sentiment_by(paragraph_text_tbl$paragraph_text)$sd,
+    ave_sentiment = sentiment_by(paragraph_text_tbl$paragraph_text)$ave_sentiment,
+    label = str_glue("Page: {page_num}
+                            Paragraph: {paragraph_num}
+                            Sentiment: {round(ave_sentiment)}
+                            ---
+                            {str_wrap(paragraph_text, width = 80)}")
+    )
+```
+
+We can plot the page number, the paragraphs and the average sentiment with the following code:
+
+```{r plotly_sentiment}
+g <- ggplot(paragraph_text_tbl, aes(page_num, ave_sentiment, color = ave_sentiment)) +
+    geom_point(aes(text = label, 
+                   size = abs(ave_sentiment))) +
+    scale_color_viridis_c(option='plasma') +
+    labs(
+        title = "Sentiment by page",
+        x = "Page number", y = "Sentiment score"
+    )
+
+g <- g + theme(legend.position = "bottom",
+          legend.box = "vertical")
+
+ggplotly(g, tooltip = "text")
+```
+
+
+
+
+
+

@@ -1,0 +1,13 @@
+name: NLP_from_Twitter
+title: NLP_from_Twitter
+username:
+account: juan-izurieta
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2814702
+bundleId: 3632482
+url: https://juan-izurieta.shinyapps.io/NLP_from_Twitter/
+when: 1600195361.34312
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: app_a_medias.R|app_anterior.R|Twitter_scrapping_and_NLP.Rmd

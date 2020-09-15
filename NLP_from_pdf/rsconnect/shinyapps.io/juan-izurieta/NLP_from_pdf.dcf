@@ -1,0 +1,13 @@
+name: NLP_from_pdf
+title: NLP_from_pdf
+username:
+account: juan-izurieta
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2814990
+bundleId: 3632786
+url: https://juan-izurieta.shinyapps.io/NLP_from_pdf/
+when: 1600201689.0514
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: app_adjusted.R|app_anterior.R|mkdwn_NLP_using_udpipeand_sentimentr.Rmd|obama_speeches.pdf|ud_model.rds|css/styles.css

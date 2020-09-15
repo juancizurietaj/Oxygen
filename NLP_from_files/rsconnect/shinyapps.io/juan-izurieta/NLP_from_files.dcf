@@ -1,0 +1,13 @@
+name: NLP_from_files
+title: NLP_from_files
+username:
+account: juan-izurieta
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2814823
+bundleId: 3632506
+url: https://juan-izurieta.shinyapps.io/NLP_from_files/
+when: 1600195774.02039
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: NLP _and_sentiment_analysis_from_files.Rmd|Data
