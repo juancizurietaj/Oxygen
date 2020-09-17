@@ -1,0 +1,350 @@
+---
+title:    "Natural Language Processing in Social Media"
+subtitle: "Oxygen ML module for tweets scrapping and NLP"
+date:     "August 20th 2020"
+urlcolor: gray
+output:
+  html_document: 
+    theme:        united 
+    highlight:    pygments
+    toc:          TRUE
+    toc_float:    TRUE
+    code_folding: show
+    includes:
+    after_body:   footer.html
+  pdf_document:   default
+  epuRate::epurate:
+    number_sections: FALSE
+    code_folding:    "show"
+    toc:          TRUE 
+    word_document:  default
+  rmdformats::readthedown:
+    toc:          TRUE 
+    toc_float:    TRUE     
+---
+
+```{js logo-js, echo=FALSE}
+$(document).ready(function() {
+  $('#header').parent().prepend('<div id=\"logo\"><img src=\"https://drive.google.com/uc?id=1daMjDA9V2WhZUqS4iyatXxBVg7MvJAZt" style=\"position:absolute; top:0; right:0; padding:20px; height:120px\"></div>');
+  $('#header').css('margin-right', '120px')
+});
+```
+
+
+```{r libraries, message=FALSE, warning=FALSE}
+# Sentiment
+library(sentimentr)
+library(syuzhet)
+
+# Dates
+library(lubridate)
+
+# Text cleaning
+library(textclean)
+
+# Visualization
+library(plotly)
+library(viridis)
+library(hrbrthemes)
+library(magrittr)
+
+# Core
+library(tidyverse)
+library(tidyquant)
+
+# Using Twitter API
+library(rtweet)
+
+# NLP
+library(udpipe)
+
+# Computational processes metrics
+library(tictoc)
+```
+
+# Description of this markdown
+This document contains explanations for all functionalities of the related Shiny app in the folder.
+
+# Get the Twitter data
+The token has been stored previously as a RDS file. The bearer_token function from rtweet allows to use credentials and connect to Twiter's API.
+
+
+```{r set_twitter_tokens}
+## Authenticate via web browser
+token <- readRDS("token.rds")
+bearer_token(token)
+
+```
+
+The function search_tweets allows to make a query to the aPI. Arguments passed include the topic or hashtag (q), if a parsed data frame should be retrieved (parse=T, if parse=F a nested list is downloaded), the number of tweets (n) and a specific language can be set (lang).
+
+```{r retrieve_data}
+## search for 500 tweets using hashtag
+twts <- search_tweets(q = "#blacklivesmatter", parse = T, n = 1000, lang = "en")
+```
+
+Next step is to convert downloaded data frame to a tibble to be processed later.
+
+```{r create_data_tibble}
+tweet_table_data <- twts %>% select(user_id, status_id, dateTime = created_at, 
+                                    user = screen_name, text, likes = favorite_count, 
+                                    rt = retweet_count)
+
+tweet_table_data
+```
+
+# Clean the data
+It's important to remove hashtags, tags, urls, html code and other text features. The textclean library is quite easy to use, and also faster than other text replacement functions, for example gsub, but only in big chunks of texts. For tweets, gsub performs better than textclean, but is more difficult to get the appropiate regular expressions for all the changes.
+
+```{r clean_texts_gsub}
+
+tic()
+tweet_table_data$text_clean <- gsub("&amp", "", tweet_table_data$text)
+tweet_table_data$text_clean <- gsub("&amp", "", tweet_table_data$text)
+tweet_table_data$text_clean <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", tweet_table_data$text)
+tweet_table_data$text_clean <- gsub("@\\w+", "", tweet_table_data$text)
+tweet_table_data$text_clean <- gsub("[[:punct:]]", "", tweet_table_data$text)
+tweet_table_data$text_clean <- gsub("[[:digit:]]", "", tweet_table_data$text)
+tweet_table_data$text_clean <- gsub("http\\w+", "", tweet_table_data$text)
+tweet_table_data$text_clean <- gsub("[ \t]{2,}", "", tweet_table_data$text)
+tweet_table_data$text_clean <- gsub("^\\s+|\\s+$", "", tweet_table_data$text)
+
+tweet_table_data$text_clean <- tolower(tweet_table_data$text_clean)
+tweet_table_data$text_clean <- iconv(tweet_table_data$text_clean, "UTF-8", "ASCII", sub="")
+
+toc()
+
+```
+
+
+```{r clean_text_dplyr_1}
+# Just checking dplyr + textclean performance:
+tic()
+tweet_table_data %>% mutate(text_clean = text %>%
+                              replace_tag() %>%
+                              replace_emoji() %>%
+                              replace_non_ascii() %>%
+                              replace_number() %>%
+                              replace_url() %>%
+                              replace_html() %>%
+                              tolower()
+                            ) 
+toc()
+```
+
+
+# Get sentiment
+Over the cleaned text variable, we can get a sentiment regression using sentimentr. A list with the extra column names that we want to include in the resulting dataframe mus be passed, of not only predictions are going to be returned.
+
+```{r get_sentiment}
+tweet_sentiments <- tweet_table_data %>% mutate(text_split = get_sentences(text_clean)) %$% sentiment_by(text_split, list(status_id, user, dateTime, text, text_clean, rt))
+
+tweet_sentiments <- tweet_sentiments %>% 
+  mutate(minutes_from_now = round(difftime(tweet_sentiments$dateTime, 
+                                           now(tzone = "UTC"), units="mins"),0))
+
+tweet_sentiments
+```
+
+# Plot tweet sentiment average in time
+The following is the main plot in the app. It uses the time stanmp on the x axis, the average sentiment predicted on the y axis. Each tweet is plotted and the size indicates the number of retweets. A bounding text wrapper is used (with label_wrap_gen function) to show a nice wrapped tweet text on the plotly output.
+
+```{r plot_sentiment}
+label_wrap <- label_wrap_gen(width = 60)
+g <- tweet_sentiments %>% 
+  ggplot(aes(x=dateTime, y=ave_sentiment, size = rt, color = ave_sentiment)) +
+    geom_point(alpha=0.9,
+               aes(text = str_glue("<b>Date-time:,</b> {dateTime}
+                                      <b>Sentiment score:</b> {round(ave_sentiment,2)}
+                                      <b>Retweets:</b> {rt}
+                                      <b>Tweet:</b> {label_wrap(text)}"))) +
+    geom_hline(aes(yintercept = mean(ave_sentiment)), color = "black") +
+    geom_hline(aes(yintercept = median(ave_sentiment) + 1.96*IQR(ave_sentiment)), color = "#ffd633") +
+    geom_hline(aes(yintercept = median(ave_sentiment) - 1.96*IQR(ave_sentiment)), color = "#600080") +
+    scale_size(range = c(.2, 18)) +
+    scale_color_viridis(option="plasma") +
+    theme_ipsum() +
+    theme(legend.position = "none") +
+    ggtitle("Average sentiment of tweets in time") +
+    ylab("Average sentiment of tweet") +
+    xlab("Date - time")
+
+ggplotly(g, tooltip = "text") 
+```
+
+# Predict sentiment using syuzhet
+Syuzhet library also predicts sentiments and emptions but, checking words in a lexicon and returning the sentiment valence of them. It's a bit faster than sentimentr and has proved better for Tweets in our tests. 
+
+
+```{r sentiments_syuzhet}
+## Get sentiments with syuzhet
+tweet_sentiments2 <- tweet_table_data %>% mutate(ave_sentiment = syuzhet::get_sentiment(tweet_table_data$text_clean))
+
+tweet_sentiments2
+```
+
+Let's check the same plot but with shyuzhet predictions:
+```{r plot_sentiment}
+label_wrap <- label_wrap_gen(width = 60)
+g <- tweet_sentiments2 %>% 
+  ggplot(aes(x=dateTime, y=ave_sentiment, size = rt, color = ave_sentiment)) +
+    geom_point(alpha=0.9,
+               aes(text = str_glue("<b>Date-time:,</b> {dateTime}
+                                      <b>Sentiment score:</b> {round(ave_sentiment,2)}
+                                      <b>Retweets:</b> {rt}
+                                      <b>Tweet:</b> {label_wrap(text)}"))) +
+    geom_hline(aes(yintercept = mean(ave_sentiment)), color = "black") +
+    geom_hline(aes(yintercept = median(ave_sentiment) + 1.96*IQR(ave_sentiment)), color = "#ffd633") +
+    geom_hline(aes(yintercept = median(ave_sentiment) - 1.96*IQR(ave_sentiment)), color = "#600080") +
+    scale_size(range = c(.2, 18)) +
+    scale_color_viridis(option="plasma") +
+    theme_ipsum() +
+    theme(legend.position = "none") +
+    ggtitle("Average sentiment of tweets in time predicting with shuzhet") +
+    ylab("Average sentiment of tweet") +
+    xlab("Date - time")
+
+ggplotly(g, tooltip = "text") 
+```
+
+Shyuzhet results are more "neutral" than sentimentr's. But, *the big difference would be that shyuzhet, as uses lexicons, allows other languages to be predicted. Language can be changed in the "language" argument.*
+
+# Table of most RT tweets
+
+The chart is good but sometimes is better to have a sorted table with the most retweeted tweets and the predicted sentiment.
+```{r table_most_rt}
+
+top_positive_rt <- tweet_sentiments %>% 
+  arrange(desc(rt)) %>% mutate(sentiment_score = round(ave_sentiment,2)) %>% select(rt, text, sentiment_score)
+
+top_positive_rt
+```
+
+# Get tweets polarity
+Using a simple ifelse condition tweets can be classified into positive (>0), neutral (==0) or negative (<0). This is useful for having the whole picture of the sentiment in the tweets.
+
+```{r polarity}
+polarity_tweets <- tweet_sentiments %>% 
+  mutate(polarity_level = factor(ifelse(ave_sentiment < 0, "Negative",
+                                 ifelse(ave_sentiment > 0, "Positive","Neutral"))))
+
+polarity_tweets <- polarity_tweets %>% group_by(minutes_from_now, polarity_level) %>% mutate(count = n())
+```
+
+
+
+# Plot tweets polarity
+A polarity plot can be created from the new groups.
+
+```{r plot_polarity_animated}
+g <- polarity_tweets %>% ggplot(aes(x=minutes_from_now, y=count, group=polarity_level, color=polarity_level)) +
+    geom_line() +
+    geom_point() +
+    ggtitle("Evolution of tweets per polarity") +
+    scale_color_viridis(discrete = T, option="plasma") +
+    theme_ipsum() +
+    ylab("Number of tweets")
+    #+ transition_reveal(minutes_from_now)
+
+g
+```
+
+
+# Get emotions
+Sentimentr and Shyuzhet have a function for prediction emotion in words. The following uses the sentimentr emotion function.
+
+```{r get_emotions}
+emotion_tweets <- tweet_table_data %>% get_sentences(tweet_table_data$text_clean) %>% emotion(drop.unused.emotions = TRUE)
+
+```
+
+
+# Plot emotions in time
+Using the plot function a predesigned chart of changes in emotions within texts is shown.
+
+```{r plot_emotions}
+emotion_tweets_ordered <- arrange(emotion_tweets, dateTime)
+g <- plot(emotion_tweets_ordered, facet = FALSE)
+ggplotly(g, tooltip = c("emotion"))
+```
+
+# Emotions with Shyuzhet
+The get_nrc_sentiment function allows to check emotions using the NRC lexicon.
+```{r}
+get_nrc_sentiment(tweet_table_data, language = 'english')
+```
+
+
+
+# NLP
+For Natural Language Processing will be using udpipe library. Universal dependencies allows to analyze components of texts in a very easy way.
+
+The current udpipe model must be downloaded.
+
+```{r import_model}
+ud_model <- udpipe_download_model(language = "english")
+saveRDS(ud_model, "ud_model.rds")
+ud_model <- udpipe_load_model(ud_model$file_model)
+
+```
+
+Using udpipe_annotate function, the texts are analyzed and each word is classified in UPOS (universal parts of languages). Also a language argument can be used with udpipe.
+
+```{r annotate_texts}
+x <- udpipe_annotate(ud_model, x = tweet_sentiments$text_clean, doc_id = tweet_sentiments$status_id)
+x <- as.data.frame(x)
+str(x)
+```
+
+Let's filter and plot the adjectives in the annotated text:
+
+```{r plot_common_adjectives}
+# Prepare data:
+stats <- subset(x, upos %in% c("ADJ")) 
+stats <- txt_freq(stats$lemma)
+stats$key <- factor(stats$key, levels = rev(stats$key))
+
+# Plot
+g <- ggplot(stats[1:30,], aes(x=key, y=freq)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+    coord_flip() +
+    xlab("") +
+    theme_bw() + 
+    ggtitle("Top 30 most frequent adjectives in tweets")
+
+ggplotly(g, tooltip = c("key", "freq"))
+```
+Changing the search term in UPOS allows to filter by NOUNS, VERBS or all of the following:
+
+```{r upos_cetagories}
+table(x$upos)
+```
+
+Words relationships can be extracted to. Bigrams can be extracted with the cooccurrence function from udpipe. The term argument allows to use, for example only the lemmatized words in the processed dataframe.
+
+```{r cooc_table}
+cooc <- cooccurrence(x = subset(x, upos %in% c('NOUN', 'ADJ')), 
+                    term  = 'lemma', 
+                    group = c('doc_id', 'paragraph_id', 'sentence_id'))
+```
+
+Using networkD3 a dynamic network plot can be generated showing relationships between words. The following is limited to the first 100 most common connections.
+
+```{r coocurrences_dynamic}
+library(networkD3)
+grapho <- data.frame(from=cooc$term1[1:100], to=cooc$term2[1:100])
+p <- simpleNetwork(grapho, 
+                   height="500px", 
+                   width="700px",
+                   linkDistance = 20,
+                   charge = -100,
+                   fontSize = 14,
+                   fontFamily = "arial",
+                   zoom = T)
+p
+```
+
+
+
+
+
