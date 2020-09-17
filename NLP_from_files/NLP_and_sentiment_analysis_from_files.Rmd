@@ -1,0 +1,289 @@
+---
+title:    "Natural Language Processing from files"
+subtitle: "Oxygen ML module for NLP and sentiment analysis"
+date:     "August 20th 2020"
+urlcolor: gray
+output:
+  html_document: 
+    theme:        united 
+    highlight:    pygments
+    toc:          TRUE
+    toc_float:    TRUE
+    code_folding: show
+    includes:
+    after_body:   footer.html
+  pdf_document:   default
+  epuRate::epurate:
+    number_sections: FALSE
+    code_folding:    "show"
+    toc:          TRUE 
+    word_document:  default
+  rmdformats::readthedown:
+    toc:          TRUE 
+    toc_float:    TRUE     
+---
+
+```{js logo-js, echo=FALSE}
+$(document).ready(function() {
+  $('#header').parent().prepend('<div id=\"logo\"><img src=\"https://drive.google.com/uc?id=1daMjDA9V2WhZUqS4iyatXxBVg7MvJAZt" style=\"position:absolute; top:0; right:0; padding:20px; height:120px\"></div>');
+  $('#header').css('margin-right', '120px')
+});
+```
+
+
+```{r libraries, message=FALSE, warning=FALSE}
+# Shiny
+library(shiny)
+library(shinythemes)
+library(shinyWidgets)
+
+# Sentiment
+library(sentimentr)
+library(syuzhet)
+
+# Dates
+library(lubridate)
+
+# Visualization
+library(DT)
+library(plotly)
+library(viridis)
+library(hrbrthemes)
+library(magrittr)
+library(networkD3)
+
+# Animation
+library(gganimate)
+library(gifski)
+
+# Core
+library(data.table)
+library(tidyverse)
+library(tidyquant)
+
+# NLP
+library(udpipe)
+```
+
+# Description of this markdown
+This document contains explanations for all functionalities of the related Shiny app in the folder.
+
+# Get the data
+Using data.table fread function a csv is with reviews on hotels in Europe is loaded.
+```{r}
+data <- fread("Data/Hotel_reviews_sample2.csv", encoding = "UTF-8")
+str(data)
+```
+
+# Clean the data
+It's important to remove hashtags, tags, urls, html code and other text features. The textclean library is quite easy to use, and also faster than other text replacement functions, for example gsub, but only in big chunks of texts. For small texts, gsub performs better than textclean, but is more difficult to get the appropiate regular expressions for all the changes.
+
+```{r clean_texts_gsub}
+
+selected_data <- data.frame(text = data$Review, id = seq(1, nrow(data)), 1, score = data$Reviewer_Score)
+
+selected_data$text_clean <- gsub("&amp", "", selected_data$text)
+selected_data$text_clean <- gsub("&amp", "", selected_data$text)
+selected_data$text_clean <- gsub("(RT|via)((?:\\b\\W*@\\w+)+)", "", selected_data$text)
+selected_data$text_clean <- gsub("@\\w+", "", selected_data$text)
+selected_data$text_clean <- gsub("[[:punct:]]", "", selected_data$text)
+selected_data$text_clean <- gsub("[[:digit:]]", "", selected_data$text)
+selected_data$text_clean <- gsub("http\\w+", "", selected_data$text)
+selected_data$text_clean <- gsub("[ \t]{2,}", "", selected_data$text)
+selected_data$text_clean <- gsub("^\\s+|\\s+$", "", selected_data$text)
+
+selected_data$text_clean <- iconv(selected_data$text_clean, "UTF-8", "ASCII", sub="")
+selected_data$text_clean <- tolower(selected_data$text_clean)
+
+```
+
+
+# Get sentiment
+Over the cleaned text variable, we can get a sentiment regression using sentimentr. A list with the extra column names that we want to include in the resulting dataframe mus be passed, of not only predictions are going to be returned.
+
+```{r get_sentiment}
+sentiments <- selected_data %>% mutate(text_split = get_sentences(text_clean)) %$% sentiment_by(text_split, list(id, text, text_clean, score))
+
+sentiments
+```
+
+
+# Sentiments using syuzhet library
+Syuzhet library also predicts sentiments and emotions but, checking words in a lexicon and returning the sentiment valence of them. It's a bit faster than sentimentr and has proved better for small texts in our tests. 
+
+```{r syuzhet_emotions}
+emotions <- get_nrc_sentiment(selected_data$text_clean)
+emotions$id <- selected_data$id
+emotions <- left_join(emotions, select(selected_data, c(id, text_clean)), by = "id")
+```
+
+The available predicted emotions are:
+```{r emotions_names}
+names(emotions)
+```
+
+The following plot shows the emotion valence of each review. The total value for each review is the sum of each word's valence for each emotion. A loess function is used to plot trend in dataset (Useful assuming the comments have been sorted in some way).
+
+```{r plot_syushet_emotions}
+label_wrap <- label_wrap_gen(width = 60)
+g <- ggplot(emotions, aes(x=id, y=anger, col=anger)) + geom_point(aes(text = str_glue("id: {id}
+                                       <b>Average sentiment:</b> {anger}
+                                       <b>Text:</b> {label_wrap(text_clean)}"))) + geom_smooth(method = "loess", color = "cornflowerblue") + scale_color_viridis(option="plasma")
+
+ggplotly(g)
+```
+
+
+# Get texts polarity
+We can group average predicted sentiment into positive, neural and negative texts:
+
+```{r polarity}
+polarity <- sentiments %>% 
+  mutate(polarity_level = factor(ifelse(ave_sentiment < 0, "Negative",
+                                 ifelse(ave_sentiment > 0, "Positive","Neutral"))))
+
+polarity2 <- polarity %>%
+      group_by(polarity_level) %>%
+      mutate(count = n())
+
+```
+
+# Plot sentiment averages
+
+```{r plot_sentiment}
+label_wrap <- label_wrap_gen(width = 60)
+g <- polarity %>%
+  ggplot(aes(x=id, y=ave_sentiment, size = score, color = ave_sentiment)) +
+    geom_point(alpha=0.9,
+               aes(text = str_glue("<b>Score:</b> {score} 
+                                   <b>Sentiment score:</b> {round(ave_sentiment,2)}
+                                      <b>Text:</b> {label_wrap(text)}"))) +
+    geom_hline(aes(yintercept = mean(ave_sentiment)), color = "black") +
+    geom_hline(aes(yintercept = median(ave_sentiment) + 1.96*IQR(ave_sentiment)), color = "#ffd633") +
+    geom_hline(aes(yintercept = median(ave_sentiment) - 1.96*IQR(ave_sentiment)), color = "#600080") +
+    scale_size(range = c(.1, 4)) +
+    scale_color_viridis(option="plasma") +
+    theme_ipsum() +
+    theme(legend.position = "none") +
+    ggtitle("Average sentiment of texts") +
+    ylab("Average sentiment") +
+    xlab("Texts")
+
+ggplotly(g, tooltip = "text") 
+```
+
+
+
+```{r polarity_plot}
+g <- polarity2 %>% ggplot( aes(x=polarity_level, y=count, fill=polarity_level)) +
+      geom_bar(stat="identity") + coord_flip() +
+      scale_fill_viridis(discrete=T, option="plasma") +
+      theme_ipsum() + 
+      theme(legend.position = "none") +
+      ylab("Number of tweets") +
+      xlab("Tweets polarity category")
+    
+    ggplotly(g)
+```
+
+
+
+# NLP
+For Natural Language Processing will be using udpipe library. Universal dependencies allows to analyze components of texts in a very easy way.
+
+The current udpipe model must be downloaded.
+
+```{r import_model}
+ud_model <- udpipe_download_model(language = "spanish")
+#saveRDS(ud_model, "ud_model.rds")
+ud_model <- udpipe_load_model(ud_model$file_model)
+
+```
+
+
+Using udpipe_annotate function, the texts are analyzed and each word is classified in UPOS (universal parts of languages). Also a language argument can be used with udpipe.
+
+```{r annotate_texts}
+x <- udpipe_annotate(ud_model, x = selected_data$text_clean, id = selected_data$id)
+x <- as.data.frame(x)
+str(x)
+```
+
+Let's filter and plot the adjectives in the annotated text. Changing the search term in UPOS allows to filter by NOUNS, VERBS or other parts of speech.
+
+```{r plot_common_adjectives}
+# Prepare data:
+stats <- subset(x, upos %in% c("ADJ", "NOUN", "VERB"))
+
+# Prepare for join
+library(stringr)
+regexp <- "[[:digit:]]+"
+stats$id <- as.integer(str_extract(stats$doc_id, regexp))
+
+#stats <- left_join(x=stats, y=selected_data, by = "id")
+stats <- left_join(x=stats, y=select(selected_data, c(id,score)), by = "id")
+
+stats <- filter(stats, score > 4)
+
+stats <- txt_freq(stats$lemma)
+stats$key <- factor(stats$key, levels = rev(stats$key))
+
+# Plot
+g <- ggplot(stats[1:30,], aes(x=key, y=freq)) +
+    geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+    coord_flip() +
+    xlab("") +
+    theme_bw() + 
+    ggtitle("Top 30 most frequent adjectives")
+
+ggplotly(g, tooltip = c("key", "freq"))
+```
+
+Words relationships can be extracted to. Bigrams can be extracted with the cooccurrence function from udpipe. The term argument allows to use, for example only the lemmatized words in the processed dataframe.
+
+
+```{r cooc_table}
+cooc <- cooccurrence(x = subset(x, upos %in% c('NOUN', 'ADJ')), 
+                    term  = 'lemma', 
+                    group = c('doc_id', 'paragraph_id', 'sentence_id'),
+                    skipgram = 3)
+```
+
+
+Using networkD3 a dynamic network plot can be generated showing relationships between words. The closer the nodes, the most frequently are words found together in text. The following is limited to the first 200 most common connections.
+
+```{r coocurrences_dynamic}
+library(networkD3)
+grapho <- data.frame(from=cooc$term1[1:200], to=cooc$term2[1:200])
+p <- simpleNetwork(grapho,
+                   height="500px", 
+                   width="700px",
+                   linkDistance = 20,
+                   charge = -100,
+                   fontSize = 14,
+                   fontFamily = "arial",
+                   zoom = T)
+p
+```
+
+The network plot can be filtered by specific terms in text, Let;s check the most related terms for the word "bed".
+
+```{r concurrences_dynamic_search_term}
+search_term <- c("bed")
+grapho <- data.frame(cooc) %>% filter_all(any_vars(. %in% search_term)) %>% top_n(50)
+p <- simpleNetwork(grapho, 
+                   height="500px", 
+                   width="700px",
+                   linkDistance = 20,
+                   charge = -300,
+                   fontSize = 14,
+                   fontFamily = "arial",
+                   zoom = T)
+p
+```
+
+
+
+
+
+
