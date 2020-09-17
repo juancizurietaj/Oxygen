@@ -7,13 +7,20 @@ This repository contains code for 3 shiny apps that use Natural Language Process
 3. NLP & SA from pdfs, extracts information from pdfs and applies NLP and SA. Interface allows to check previes and results by page.
 
 **Some functionalities of the NLP & SA from Twitter shinyapp:**
-![](https://github.com/juancizurietaj/Oxygen/blob/master/Images/Twitter_nlp_sentiment_analysis.gif)
+<br>
 
+![](https://github.com/juancizurietaj/Oxygen/blob/master/Images/Twitter_NLP_SA.gif)
+<br>
+<br>
 
 **Some functionalities of the NLP & SA from files:**
+<br>
 ![](https://github.com/juancizurietaj/Oxygen/blob/master/Images/Files_NLP_SA.gif)
-
+<br>
+<br>
 
 **Some functionalities of the NLP & SA from pdfs:**
+<br>
 ![](https://github.com/juancizurietaj/Oxygen/blob/master/Images/PDF_NLP_SA.gif)
-
+<br>
+<br>
