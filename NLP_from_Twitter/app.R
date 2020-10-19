@@ -1,3 +1,4 @@
+
 # LIBRARIES ----
 # Shiny
 library(shiny)
@@ -6,6 +7,7 @@ library(shinyWidgets)
 library(shinydashboard)
 library(shinydashboardPlus)
 library(shinycssloaders)
+library(shinyalert)
 
 # Sentiment
 library(syuzhet)
@@ -34,7 +36,7 @@ library(udpipe)
 # Using Twitter API
 library(rtweet)
 
-## Authenticate via web browser
+# Twitter authentication via web browser ----
 token <- readRDS("token.rds")
 bearer_token(token)
 
@@ -42,11 +44,10 @@ bearer_token(token)
 ud_model_eng <- udpipe_load_model("english-ewt-ud-2.4-190531.udpipe")
 ud_model_esp <- udpipe_load_model("spanish-gsd-ud-2.4-190531.udpipe")
 
-# Progress messages (placed here because they look ugly if placed within code, and easier to change them later)
-message_1 <- "Step 1 of 4: We're connecting to Twitter and retrieving your tweets"
-message_2 <- "Step 2 of 4: We're mapping emotions. We're searching each word of your tweets in emotion-defined lexicons, so we can categorize tweets by predominant emotions in words."
-message_3 <- "Step 3 of 4: We're annotating and analyzing the sentiment of your tweets. That means we're understanding how words are related, which are the most common words per type, and of course, what are your tweets sentiments"
-message_4 <- "Last step! We're making an animated plot, may take up to 20 seconds. We'll show you how the trends of positive or negative tweets have changed in time, so if something trigger sentiments in your tweets, you'll know when that happened and how much affected the sentiment trends. Awesome!"
+# Progress messages ----
+message_1 <- "Step 1 of 3: We're connecting to Twitter and retrieving your tweets"
+message_2 <- "Step 2 of 3: We're mapping emotions. We're searching each word of your tweets in emotion-defined lexicons, so we can categorize tweets by predominant emotions in words."
+message_3 <- "Last step: We're annotating and analyzing the sentiment of your tweets. That means we're understanding how words are related, which are the most common words per type, and of course, what are your tweets sentiments"
 
 ##############
 ### HEADER ###
@@ -68,22 +69,17 @@ header <- dashboardHeaderPlus(
 ###############
 
 sidebar <- dashboardSidebar(
-  
-  sidebarMenu(
+  width=280
+  ,sidebarMenu(
     menuItem(
-      text= "Data"
+      text= "Twitter NLP & sentiment analysis"
       ,tabName = "data"
-      ,icon = icon("database")
-    )
-    ,menuItem(
-      text= "Sentiment analysis"
-      ,tabName = "sentiment"
       ,icon = icon("heart")
     )
     ,menuItem(
-      text = "Natural Language Processing"
-      ,tabName = "nlp"
-      ,icon = icon("comment")
+      text= "Other Oxygen ML tools"
+      ,tabName = "tools"
+      ,icon = icon("wrench")
     )
   )
 )
@@ -132,19 +128,7 @@ body <- dashboardBody(
                 
                 actionButton(inputId = "submit", "Search and analyze", class = "btn-primary", style="color: #ffff; background-color: #41585D; border-color: #404040"),
                 hr()
-        )
-        
-      )
-    ),
-    
-    ##############
-    ### PAGE 2 ###
-    ##############
-    
-    tabItem(
-      tabName = "sentiment",
-      fluidRow(
-        
+        ),
         
         boxPlus(
           title = "Sentiment analysis",
@@ -177,20 +161,12 @@ body <- dashboardBody(
             div(class = "panel-body", plotlyOutput(outputId = "plotly_bars", height = 400) %>% withSpinner(color = "#41585D"))
           ),
           
-          # ---- Texts sentiment violin plot gganimate_plot
+          # ---- Texts sentiment violin plot
           
           div(
             class = "col-sm-12 panel",
             h5("General sentiment of tweets, a violin plot"),
             div(class = "panel-body", plotlyOutput(outputId = "plotly_violin", height = 400) %>% withSpinner(color = "#41585D"))
-          ),
-          
-          # ---- Tweets changes animation gganimate_plot
-          
-          div(
-            class = "col-sm-12 panel",
-            h5("Evolution of sentiments in tweets"),
-            div(class = "panel-body", imageOutput(outputId = "gganimate_plot", height = 400) %>% withSpinner(color = "#41585D"))
           )
           
         ),
@@ -210,18 +186,8 @@ body <- dashboardBody(
             selectInput(inputId = "var_emotions", choices = c("anger", "anticipation", "disgust", "fear", "joy", "sadness", "surprise", "trust", "negative", "positive"),"", ""),
             div(class = "panel-body", plotlyOutput(outputId = "plotly_emotions", height = 400) %>% withSpinner(color = "#41585D"))
           )
-        )
+        ),
         
-      )
-    ),
-    
-    ##############
-    ### PAGE 3 ###
-    ##############
-    
-    tabItem(
-      tabName = "nlp",
-      fluidRow(
         boxPlus(
           title = "Texts analysis",
           width = 12,
@@ -255,6 +221,49 @@ body <- dashboardBody(
             simpleNetworkOutput("graphos") %>% withSpinner(color = "#41585D")
           )
         )
+        
+      )
+    )
+    
+    ,tabItem(
+      tabName = "tools",
+      fluidRow(
+        widgetUserBox(
+          width = 12,
+          type = 2,
+          subtitle = "Automated machine learning tool",
+          background = F,
+          src = "https://www.flaticon.com/svg/static/icons/svg/305/305098.svg",
+          color = "gray",
+          a("Go to the app", href="https://manu-am.shinyapps.io/Oxygen-ML/")
+        ),
+        # widgetUserBox(
+        #   width = 12,
+        #   type = 2,
+        #   subtitle = "NLP & sentiment analysis from Twitter",
+        #   background = F,
+        #   src = "https://www.flaticon.com/svg/static/icons/svg/733/733579.svg",
+        #   color = "gray",
+        #   a("Go to the app", href="https://manu-am.shinyapps.io/Oxygen-ML/")
+        # ),
+        widgetUserBox(
+          width = 12,
+          type = 2,
+          subtitle = "NLP & sentiment analysis from PDFs",
+          background = F,
+          src = "https://www.flaticon.com/svg/static/icons/svg/337/337946.svg",
+          color = "gray",
+          a("Go to the app", href="https://juan-izurieta.shinyapps.io/NLP_from_pdf/")
+        ),
+        widgetUserBox(
+          width = 12,
+          type = 2,
+          subtitle = "NLP & sentiment analysis from files",
+          background = F,
+          src = "https://www.flaticon.com/svg/static/icons/svg/180/180855.svg",
+          color = "gray",
+          a("Go to the app", href="https://juan-izurieta.shinyapps.io/NLP_from_files/")
+        )
       )
     )
   )
@@ -269,7 +278,8 @@ ui <- dashboardPagePlus(
   header, 
   sidebar, 
   body, 
-  skin = "black"
+  skin = "black",
+  useShinyalert()
 )
 
 
@@ -279,10 +289,35 @@ ui <- dashboardPagePlus(
 
 server <- function(session, input, output) {
   
+  # Start instructions:
+  shinyalert(
+    title = "Welcome",
+    text = str_glue("<b>HOW TO USE THE TOOL:</b><br>", 
+                    "<br>",
+                    "<b>Insert a hashtag, keyword or topic,</b> and a number of tweets to download.<br>",
+                    "<b>Select the analysis language.</b> English and Spanish are supported.<br>", 
+                    "<b>Click 'Search and analize'</b> and wait for your results."),
+    size = "m", 
+    closeOnEsc = TRUE,
+    closeOnClickOutside = TRUE,
+    html = TRUE,
+    type = "",
+    showConfirmButton = TRUE,
+    showCancelButton = FALSE,
+    confirmButtonText = "Start",
+    confirmButtonCol = "#41585D",
+    timer = 0,
+    imageUrl = "https://drive.google.com/uc?export=view&id=1cCWQwUMmrn7UDG0TvNWjpyjiJFH37wnr", 
+    imageWidth = "200",
+    animation = TRUE
+  )
+  
+  
   # Setup Reactive Values ----
   rv <- reactiveValues()
   
   observeEvent(input$submit, {
+    
     
     # Process data ----
     
@@ -291,6 +326,26 @@ server <- function(session, input, output) {
     rv$data <-  withProgress(message = message_1, value = 0, {
       
       incProgress(1/4)
+      
+      # Progress message:
+      
+      shinyalert(
+        title = "Downloading and analyzing tweets",
+        text = "Please wait, we'll let you know when results are ready.",
+        size = "m", 
+        closeOnEsc = TRUE,
+        closeOnClickOutside = TRUE,
+        html = TRUE,
+        type = "",
+        showConfirmButton = FALSE,
+        showCancelButton = FALSE,
+        timer = 0,
+        imageUrl = "https://drive.google.com/uc?export=view&id=1StE42A3JStLVe4Rn-5eI-1E-WOkFGppc", 
+        imageWidth = "200",
+        animation = F,
+        immediate = T
+      )
+      
       
       search_tweets(
         q           = input$query, 
@@ -301,6 +356,13 @@ server <- function(session, input, output) {
       
     })
     
+    rv$selected_data <- rv$data %>% select(user_id, 
+                                           status_id, 
+                                           dateTime = created_at,
+                                           user = screen_name, text, 
+                                           rt = retweet_count)
+    
+    # Clean data
     rv$selected_data <- rv$data %>% select(user_id, 
                                            status_id, 
                                            dateTime = created_at,
@@ -324,7 +386,7 @@ server <- function(session, input, output) {
     rv$time_now <- now(tzone = "GMT")
     
     ## Get sentiments
-    rv$tweet_sentiments <- rv$selected_data %>% mutate(ave_sentiment = syuzhet::get_sentiment(rv$selected_data$text_clean))
+    rv$tweet_sentiments <- rv$selected_data %>% mutate(ave_sentiment = syuzhet::get_sentiment(rv$selected_data$text_clean, language = input$language))
     
     rv$tweet_sentiments <- rv$tweet_sentiments %>%
       mutate(minutes_from_now = round(difftime(rv$tweet_sentiments$dateTime,
@@ -340,6 +402,7 @@ server <- function(session, input, output) {
       mutate(count = n())
     
     ## Get emotions
+    
     rv$emotion_tweets <- withProgress(message = message_2, value = 0, {incProgress(2/4)
       
       get_nrc_sentiment(rv$selected_data$text_clean, language = input$language)
@@ -352,23 +415,20 @@ server <- function(session, input, output) {
     
     ## Annotate text
     
+    
     if(input$language == "english"){
       ud_model <- ud_model_eng
     } else {
       ud_model <- ud_model_esp
     }
     
-    rv$annotations <- withProgress(message = message_3, 
-                                   value = 0, {
-                                     
-                                     incProgress(1/2)
-                                     
+    
+    rv$annotations <- withProgress(message = message_3, value = 0, 
+                                   {incProgress(1/2)
                                      as.data.frame(udpipe_annotate(ud_model, 
                                                                    x = rv$selected_data$text_clean, 
                                                                    doc_id = rv$selected_data$status_id))
-                                     
                                    }
-                                   
     )
     
     ## Get co-ocurrences of words
@@ -377,7 +437,27 @@ server <- function(session, input, output) {
                             group = c('doc_id', 'paragraph_id', 'sentence_id')
     )
     
+    # Ready message:
+    shinyalert(
+      title = "Ready!",
+      text = "Click outside this box and scroll down to check all the results.<br> All progress icons by Jovie Brett Bardoles.",
+      size = "m", 
+      closeOnEsc = TRUE,
+      closeOnClickOutside = TRUE,
+      html = TRUE,
+      type = "",
+      showConfirmButton = FALSE,
+      showCancelButton = FALSE,
+      timer = 0,
+      imageUrl = "https://drive.google.com/uc?export=view&id=12HSqK0UOjC8fly2y4QoXiT-nMJVkID0E", 
+      animation = F,
+      immediate = T
+    )
+    
+    
   }, ignoreNULL = FALSE)
+
+  
   
   # Plotly sentiments in time----
   output$plotly_sentiment <- renderPlotly({
@@ -404,6 +484,7 @@ server <- function(session, input, output) {
     ggplotly(g, tooltip = "text") 
     
   })
+  
   
   # DT table of tweets ranked by RT ----
   
@@ -449,39 +530,7 @@ server <- function(session, input, output) {
     ggplotly(g)
     
   })
-  
-  # gganimation of tweets in time by sentiment ----
-  
-  output$gganimate_plot <- renderImage({
-    
-    withProgress(message = 'Rendering images',
-                 value = 0, {incProgress(4/5, message = message_4)
-                   
-                   
-                   req(rv$tweet_polarity)
-                   
-                   outfile <- tempfile(fileext='.gif')
-                   
-                   ag <- rv$tweet_polarity %>% ggplot(aes(x=minutes_from_now, y=count, group=polarity, color=polarity)) +
-                     geom_line() +
-                     geom_point() +
-                     scale_color_viridis(discrete = T, option="plasma") +
-                     theme_ipsum() +
-                     ggtitle("Evolution of tweets by sentiment category") +
-                     ylab("Number of tweets") +
-                     transition_reveal(minutes_from_now)
-                   
-                   anim_save("outfile.gif", 
-                             animate(ag, height = 400, width = 800, nframes = 40, fps = 10, 
-                                     renderer = gifski_renderer())
-                   )
-                   
-                   list(src = "outfile.gif",
-                        contentType = 'image/gif'
-                   )
-                 })
-    
-  }, deleteFile = TRUE)
+
   
   # Plotly tweets emotions ----
   
@@ -557,28 +606,32 @@ server <- function(session, input, output) {
   # Plot interactive words connections ----
   # Render word graph
   
-  output$graphos <- renderSimpleNetwork({
+  observeEvent(input$submit, ({
     
-    connections <- data.frame(from=rv$cooc$term1, to=rv$cooc$term2, cooc=rv$cooc$cooc)
+    output$graphos <- renderSimpleNetwork({
+      
+      connections <- data.frame(from=rv$cooc$term1, to=rv$cooc$term2, cooc=rv$cooc$cooc)
+      
+      if(input$search_term == ""){
+        connections <- connections
+      } else{
+        connections <- connections %>% filter_all(any_vars(. %in% input$search_term))
+      }
+      
+      grapho <- connections %>% arrange(desc(cooc)) %>% top_n(input$words_connections)
+      p <- simpleNetwork(grapho,
+                         height="500px",
+                         width="700px",
+                         linkDistance = 50,
+                         charge = -350,
+                         fontSize = 14,
+                         fontFamily = "arial",
+                         nodeColour = "#69b3a2",
+                         zoom = T)
+      p
+    })
     
-    if(input$search_term == ""){
-      connections <- connections
-    } else{
-      connections <- connections %>% filter_all(any_vars(. %in% input$search_term))
-    }
-    
-    grapho <- connections %>% arrange(desc(cooc)) %>% top_n(input$words_connections)
-    p <- simpleNetwork(grapho,
-                       height="500px",
-                       width="700px",
-                       linkDistance = 50,
-                       charge = -350,
-                       fontSize = 14,
-                       fontFamily = "arial",
-                       nodeColour = "#69b3a2",
-                       zoom = T)
-    p
-  })
+  }))
   
 }
 
