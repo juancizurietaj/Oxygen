@@ -6,6 +6,7 @@ library(shinyWidgets)
 library(shinydashboard)
 library(shinydashboardPlus)
 library(shinycssloaders)
+library(shinyalert)
 
 # Sentiment
 library(syuzhet)
@@ -32,9 +33,13 @@ library(udpipe)
 ud_model_eng <- udpipe_load_model("english-ewt-ud-2.4-190531.udpipe")
 ud_model_esp <- udpipe_load_model("spanish-gsd-ud-2.4-190531.udpipe")
 
+# Sample file ----
+hotel_reviews <- fread("Hotel_reviews_sample.csv")
+
 # Progress messages (placed here because they look ugly if placed within code, and easier to change them later)
 message_1 <- "Step 1of 2: We're annotating and analyzing the sentiment of your texts. That means we're understanding how words are related, which are the most common words per type, and of course, what are your texts sentiments and emotions"
 message_2 <- "Step 2 of 2: Identifying emotions can take a bit more. We're identifying which words belongs to which emotions. When this message closes, go to Sentiment Analysis tab and select the values you want to check."
+instructions <- paste("<b>HOW TO USE THE TOOL:</b>", "Select a csv or xls file and choose the language for analysis.", "Select the variables containing the texts, the groups for comparison and any given score, like a review score", "Click 'Analize' and wait for the analysis and then check the sentiment analysis and NLP tabs", sep="\n")
 
 ##############
 ### HEADER ###
@@ -73,6 +78,11 @@ sidebar <- dashboardSidebar(
       ,tabName = "nlp"
       ,icon = icon("comment")
     )
+    ,menuItem(
+      text = "Other Oxygen ML tools"
+      ,tabName = "tools"
+      ,icon = icon("wrench")
+    )
   )
 )
 
@@ -101,22 +111,33 @@ body <- dashboardBody(
                 style= "background-color: #F6F6F6",
                 closable = F,
                 collapsible = F,
-                HTML("Select a data file to analyze using NLP and sentiment analysis. Then you need to select a text variable to analyze, a group variable to compare results and a score variable, such as ratings or stars"),
+                HTML("You can use <b>pre-loaded data</b>, which contains +2k reviews of hotels in Europe. The reviews have been sampled from"),
+                a("this dataset.", href="https://www.kaggle.com/jiashenliu/515k-hotel-reviews-data-in-europe"),
+                hr(),
+                HTML("</b>Or you can <b>upload your own csv or xls file</b> containing a review column, an score column, such as stars or points, and a group variable to compare results."),
                 hr(),
                 
                 # ---- File input
-                fileInput(inputId = "file",label = "Select file:",accept = c('text/csv', 'text/comma-separated-values,text/plain', '.csv')),
-                actionButton(inputId = "load", "Load file", class = "btn-primary", style="color: #ffff; background-color: #41585D; border-color: #404040"),
+                
+                materialSwitch(inputId = "toggle_preview_input",
+                               label = "Upload my own data:",
+                               status = "primary",
+                               value = F),
+                
+                conditionalPanel(condition = "input.toggle_preview_input == true",
+                                 fileInput(inputId = "file",label = "Select file:",accept = c('text/csv', 'text/comma-separated-values,text/plain', '.csv')),
+                                 actionButton(inputId = "load", "Load file", class = "btn-primary", style="color: #ffff; background-color: #41585D; border-color: #404040")),
                 hr(),
+                
                 
                 # ---- Select language
                 
-                HTML('Please select language for analysis:'),
+                HTML('<b>Please select language for analysis:</b> </br> If using the pre-loaded data, select: English.'),
                 selectInput(inputId = "language", choices = c("english", "spanish"),"", ""),
                 
                 # ---- Select text variable
                 
-                HTML('Please select the text variable to analyze:'),
+                HTML('<b>Please select the text variable to analyze:</b></br> If using the pre-loaded data, select the "Review" column.'),
                 selectInput(inputId = "var_text", "", ""),
                 
                 # ---- Preview text variable
@@ -131,11 +152,11 @@ body <- dashboardBody(
                 hr(),
                 
                 # ---- Group variable selection
-                HTML('Please select a group variable:'),
+                HTML('<b>Please select a group variable:</b> </br> If using the pre-loaded data, select the "Hotel_name" column.'),
                 selectInput(inputId = "var_group", "", ""),
                 
                 # ---- Score variable selection
-                HTML('And select a score variable:'),
+                HTML('<b>And select a score variable</b></br> If using the pre-loaded data, select the "Reviewer_score" column.'),
                 selectInput(inputId = "var_score", "", ""),
                 hr(),
                 
@@ -265,6 +286,39 @@ body <- dashboardBody(
         )
       )
     )
+    
+    ,tabItem(
+      tabName = "tools",
+      fluidRow(
+        widgetUserBox(
+          width = 12,
+          type = 2,
+          subtitle = "Automated machine learning tool",
+          background = F,
+          src = "https://www.flaticon.com/svg/static/icons/svg/305/305098.svg",
+          color = "gray",
+          a("Go to the app", href="https://manu-am.shinyapps.io/Oxygen-ML/")
+        ),
+        widgetUserBox(
+          width = 12,
+          type = 2,
+          subtitle = "NLP & sentiment analysis from Twitter",
+          background = F,
+          src = "https://www.flaticon.com/svg/static/icons/svg/733/733579.svg",
+          color = "gray",
+          a("Go to the app", href="https://juan-izurieta.shinyapps.io/NLP_from_Twitter/")
+        ),
+        widgetUserBox(
+          width = 12,
+          type = 2,
+          subtitle = "NLP & sentiment analysis from PDFs",
+          background = F,
+          src = "https://www.flaticon.com/svg/static/icons/svg/337/337946.svg",
+          color = "gray",
+          a("Go to the app", href="https://juan-izurieta.shinyapps.io/NLP_from_pdf/")
+        )
+      )
+    )
   )
 )
 
@@ -277,7 +331,8 @@ ui <- dashboardPagePlus(
   header, 
   sidebar, 
   body, 
-  skin = "black"
+  skin = "black",
+  useShinyalert()
 )
 
 
@@ -287,21 +342,44 @@ ui <- dashboardPagePlus(
 
 server <- function(input, output, session) {
   
+  shinyalert(
+    title = "Welcome",
+    text = str_glue("<b>HOW TO USE THE TOOL:</b><br>", 
+                    "<br>",
+                    "<b>Use the pre-loaded data</b> or you can <b>upload a csv or xls file.</b><br>",
+                    "<b>Choose a language for analysis.</b> English and Spanish are supported.</br>",
+                    "<b>Select the variables</b> containing the texts, the groups for comparison and any given score, like a review score.<br>", 
+                    "<b>Click 'Analize'</b> and then check the sentiment analysis and NLP tabs."),
+    size = "m", 
+    closeOnEsc = TRUE,
+    closeOnClickOutside = TRUE,
+    html = TRUE,
+    type = "",
+    showConfirmButton = TRUE,
+    showCancelButton = FALSE,
+    confirmButtonText = "Start",
+    confirmButtonCol = "#41585D",
+    timer = 0,
+    imageUrl = "https://drive.google.com/uc?export=view&id=1cCWQwUMmrn7UDG0TvNWjpyjiJFH37wnr", 
+    imageWidth = "200",
+    animation = TRUE
+  )
   
-  
-  
-  # Setup Reactive Values, preview and update selectors ----
   rv <- reactiveValues()
+  
+
+  
+  
+  # Preview and update selectors ----
   
   observeEvent(input$load, {
     
-    # Load data and variable names ----
     
-    req(input$file)
-    
-    inFile <- input$file
-    
-    rv$data <- fread(inFile$datapath)
+    rv$data <- if (is.null(input$file)) {
+      hotel_reviews
+    } else {
+      fread(input$file$datapath)
+    }
     
     # Update selectors ----
     
@@ -351,6 +429,23 @@ server <- function(input, output, session) {
   
   observeEvent(input$analyze, {
     
+    shinyalert(
+      title = "Analyzing text",
+      text = "Please wait, we'll let you know when results are ready.",
+      size = "m", 
+      closeOnEsc = TRUE,
+      closeOnClickOutside = TRUE,
+      html = TRUE,
+      type = "",
+      showConfirmButton = FALSE,
+      showCancelButton = FALSE,
+      timer = 0,
+      imageUrl = "https://drive.google.com/uc?export=view&id=1qrpLFDiWQOAXq7DE8KQEOQqq0TPlHYAp",
+      imageWidth = "200",
+      animation = F
+    )
+    
+    
     req(rv$data)
     
     rv$selected_data <- rv$data %>% select(input$var_text, input$var_group, input$var_score)
@@ -373,6 +468,7 @@ server <- function(input, output, session) {
     
     # Make annotations ----
     
+    
     if(input$language == "english"){
       ud_model <- ud_model_eng
     } else{
@@ -380,208 +476,243 @@ server <- function(input, output, session) {
     }
     
     rv$annotations <- withProgress(message = message_1, value = 0, {incProgress(1/2)
-      as.data.frame(udpipe_annotate
-                    (ud_model,
+      as.data.frame(udpipe_annotate(ud_model,
                       x = rv$selected_data$text_clean,
-                      doc_id = rv$selected_data$id
-                    )
-      )
-    }
+                      doc_id = rv$selected_data$id))
+      }
     )
+    
     
     # Join data to allow subsetting annotations by var_group ----
     
     # Annotations assign an alphanumeric id to each row, we need to extract the digit part:
     
-    rv$annotations_with_group <- subset(rv$annotations, upos %in% c("NOUN", "ADJ", "VERB"))
-    
-    regexp <- "[[:digit:]]+"
-    
-    rv$annotations_with_group$id <- as.integer(str_extract(rv$annotations_with_group$doc_id, regexp))
-    
-    rv$annotations_with_group <- left_join(x=rv$annotations_with_group, y=select(rv$selected_data, c(id, group)), by = "id")
-    
-    
-    ## Get sentiments
-    rv$sentiments <- data.frame(id = rv$selected_data$id, 
-                                text = rv$selected_data$text,
-                                group = rv$selected_data$group,
-                                score = rv$selected_data$score, 
-                                ave_sentiment = syuzhet::get_sentiment(rv$selected_data$text_clean), 
-                                stringsAsFactors = F)
-    
-    
-    ## Add a polarity variable grouping average sentiment
-    rv$sentiments <- rv$sentiments %>%
-      mutate(polarity = ifelse(ave_sentiment < 0, "Negative",
-                               ifelse(ave_sentiment > 0, "Positive","Neutral")))
-    
-    ## Group texts by polarity
-    rv$polarity <- rv$sentiments %>%
-      group_by(polarity, group) %>%
-      mutate(count = n())
-    
-    ## Generate emotions
-    ## Get emotions
-    rv$emotions <- withProgress(message = message_2, value = 0, {incProgress(3/4)
-                                                                             
-                                                                             get_nrc_sentiment(rv$selected_data$text_clean, language = input$language)
-                                                                             
-                                                                             })
-    rv$emotions$id <- rv$selected_data$id
-    rv$emotions <- left_join(rv$emotions, select(rv$selected_data, c(id, text)), by='id')
-    
-    
+      rv$annotations_with_group <- subset(rv$annotations, upos %in% c("NOUN", "ADJ", "VERB"))
+      
+      regexp <- "[[:digit:]]+"
+      
+      rv$annotations_with_group$id <- as.integer(str_extract(rv$annotations_with_group$doc_id, regexp))
+      
+      rv$annotations_with_group <- left_join(x=rv$annotations_with_group, y=select(rv$selected_data, c(id, group)), by = "id")
+      
+      
+      ## Get sentiments
+      rv$sentiments <- data.frame(id = rv$selected_data$id, 
+                                  text = rv$selected_data$text,
+                                  group = rv$selected_data$group,
+                                  score = rv$selected_data$score, 
+                                  ave_sentiment = syuzhet::get_sentiment(rv$selected_data$text_clean), 
+                                  stringsAsFactors = F)
+      
+      
+      ## Add a polarity variable grouping average sentiment
+      rv$sentiments <- rv$sentiments %>%
+        mutate(polarity = ifelse(ave_sentiment < 0, "Negative",
+                                 ifelse(ave_sentiment > 0, "Positive","Neutral")))
+      
+      ## Group texts by polarity
+      rv$polarity <- rv$sentiments %>%
+        group_by(polarity, group) %>%
+        mutate(count = n())
+      
+      ## Generate emotions
+      ## Get emotions
+      
+      shinyalert(
+        title = "Getting emotions",
+        text = "Please wait, we'll let you know when results are ready.",
+        size = "m", 
+        closeOnEsc = TRUE,
+        closeOnClickOutside = TRUE,
+        html = TRUE,
+        type = "",
+        showConfirmButton = FALSE,
+        showCancelButton = FALSE,
+        timer = 0,
+        imageUrl = "https://drive.google.com/uc?export=view&id=1StE42A3JStLVe4Rn-5eI-1E-WOkFGppc", 
+        imageWidth = "200",
+        animation = F,
+        immediate = T
+      )
+      
+      
+      rv$emotions <- withProgress(message = message_2, value = 0, {incProgress(3/4)
+                                                                               
+                                                                               get_nrc_sentiment(rv$selected_data$text_clean, language = input$language)
+                                                                               
+                                                                               })
+      rv$emotions$id <- rv$selected_data$id
+      rv$emotions <- left_join(rv$emotions, select(rv$selected_data, c(id, text)), by='id')
+      
+      
+      shinyalert(
+        title = "Ready!",
+        text = "Please go to sentiment analysis tab and choose the variables you want to compare.<br> All progress icons by Jovie Brett Bardoles.",
+        size = "m", 
+        closeOnEsc = TRUE,
+        closeOnClickOutside = TRUE,
+        html = TRUE,
+        type = "",
+        showConfirmButton = FALSE,
+        showCancelButton = FALSE,
+        timer = 0,
+        imageUrl = "https://drive.google.com/uc?export=view&id=12HSqK0UOjC8fly2y4QoXiT-nMJVkID0E", 
+        animation = F,
+        immediate = T
+      )
+  
   })
-  
-  
-  
-  # Plotly sentiments ----
-  
-  output$plotly_sentiment <- renderPlotly({
-    
-    req(rv$sentiments)
-    
-    label_wrap <- label_wrap_gen(width = 60)
-    
-    rv$filtered_sentiment <- filter(rv$sentiments, group %in% input$var_categories) %>% select(group, ave_sentiment, id, text, score, polarity)
-    
-    g <- ggplot(rv$filtered_sentiment, aes(x=frank(id), y=ave_sentiment, size = abs(ave_sentiment), color = ave_sentiment)) +
-      geom_point(alpha=0.9, aes(text = str_glue("<b>id</b>: {id}
-                                                <b>Score:</b> {score}
-                                                <b>Average sentiment:</b> {ave_sentiment}
-                                                <b>Text:</b> {label_wrap(text)}"))) + 
-      geom_hline(aes(yintercept = mean(ave_sentiment)), color = "black") +
-      geom_hline(aes(yintercept = median(ave_sentiment) + 1.96*IQR(ave_sentiment)), color = "#ffd633") +
-      geom_hline(aes(yintercept = median(ave_sentiment) - 1.96*IQR(ave_sentiment)), color = "#600080") +
-      scale_size(range = c(.2, 8)) +
-      scale_color_viridis(option="plasma") +
-      theme_ipsum() +
-      theme(legend.position = "bottom") +
-      ylab("Average sentiment of text") +
-      xlab("Texts")
-    
-    ggplotly(g, tooltip = "text")
-    
-  })
-  
-  # Polarity bar plot ----
-  
-  output$plotly_bars <- renderPlotly({
-    
-    req(rv$polarity)
-    
-    rv$filtered_polarity <- filter(rv$polarity, group %in% input$var_categories)
-    
-    g <- rv$filtered_polarity %>% ggplot( aes(x=polarity, y=count, fill=polarity)) +
-      geom_bar(stat="identity") + coord_flip() +
-      scale_fill_viridis(discrete=T, option="plasma") +
-      theme_ipsum() + 
-      theme(legend.position = "none") +
-      ylab("Number of texts") +
-      xlab("Polarity category")
-    
-    ggplotly(g)
-  })
-  
-  # Plotly sentiments polarity violin -----
-  
-  output$plotly_violin <- renderPlotly({
-    
-    req(rv$filtered_sentiment)
-    
-    g <- rv$filtered_sentiment %>% filter(polarity != 'Neutral') %>%
-      ggplot( aes(x=polarity, y=ave_sentiment, fill=polarity)) +
-      geom_violin() +
-      scale_fill_viridis(discrete=T, option="plasma") +
-      theme_ipsum() +
-      theme(legend.position = "none") +
-      ylab("Average sentiment of texts") +
-      xlab("Polarity category")
-    
-    ggplotly(g)
-    
-  })
-  
-  # Plotly emotions ----
-  
-  output$plotly_emotions <- renderPlotly({
-    
-    req(rv$emotions)
 
-    label_wrap <- label_wrap_gen(width = 60)
-    g <- rv$emotions %>% ggplot( aes(x=id, y=rv$emotions[,c(input$var_emotions)], col=rv$emotions[,c(input$var_emotions)])) + 
-      geom_point(aes(text = str_glue("<b>id</b>: {id}
-                                      <b>Text:</b> {label_wrap(text)}"))) + 
-      geom_smooth(method = "loess", color = "cornflowerblue") + 
-      scale_color_viridis(option="plasma")
+  observeEvent(input$var_categories, {
     
-    ggplotly(g)
-
+    # Plotly sentiments ----
+    
+    output$plotly_sentiment <- renderPlotly({
+      
+      req(rv$sentiments)
+      
+      label_wrap <- label_wrap_gen(width = 60)
+      
+      rv$filtered_sentiment <- filter(rv$sentiments, group %in% input$var_categories) %>% select(group, ave_sentiment, id, text, score, polarity)
+      
+      g <- ggplot(rv$filtered_sentiment, aes(x=frank(id), y=ave_sentiment, size = abs(ave_sentiment), color = ave_sentiment)) +
+        geom_point(alpha=0.9, aes(text = str_glue("<b>id</b>: {id}
+                                                  <b>Score:</b> {score}
+                                                  <b>Average sentiment:</b> {ave_sentiment}
+                                                  <b>Text:</b> {label_wrap(text)}"))) + 
+        geom_hline(aes(yintercept = mean(ave_sentiment)), color = "black") +
+        geom_hline(aes(yintercept = median(ave_sentiment) + 1.96*IQR(ave_sentiment)), color = "#ffd633") +
+        geom_hline(aes(yintercept = median(ave_sentiment) - 1.96*IQR(ave_sentiment)), color = "#600080") +
+        scale_size(range = c(.2, 8)) +
+        scale_color_viridis(option="plasma") +
+        theme_ipsum() +
+        theme(legend.position = "bottom") +
+        ylab("Average sentiment of text") +
+        xlab("Texts")
+      
+      ggplotly(g, tooltip = "text")
+      
+    })
+    
+    # Polarity bar plot ----
+    
+    output$plotly_bars <- renderPlotly({
+      
+      req(rv$polarity)
+      
+      rv$filtered_polarity <- filter(rv$polarity, group %in% input$var_categories)
+      
+      g <- rv$filtered_polarity %>% ggplot( aes(x=polarity, y=count, fill=polarity)) +
+        geom_bar(stat="identity") + coord_flip() +
+        scale_fill_viridis(discrete=T, option="plasma") +
+        theme_ipsum() + 
+        theme(legend.position = "none") +
+        ylab("Number of texts") +
+        xlab("Polarity category")
+      
+      ggplotly(g)
+    })
+    
+    # Plotly sentiments polarity violin -----
+    
+    output$plotly_violin <- renderPlotly({
+      
+      req(rv$filtered_sentiment)
+      
+      g <- rv$filtered_sentiment %>% filter(polarity != 'Neutral') %>%
+        ggplot( aes(x=polarity, y=ave_sentiment, fill=polarity)) +
+        geom_violin() +
+        scale_fill_viridis(discrete=T, option="plasma") +
+        theme_ipsum() +
+        theme(legend.position = "none") +
+        ylab("Average sentiment of texts") +
+        xlab("Polarity category")
+      
+      ggplotly(g)
+      
+    })
+    
+    # Plotly emotions ----
+    
+    output$plotly_emotions <- renderPlotly({
+      
+      req(rv$emotions)
+    
+      label_wrap <- label_wrap_gen(width = 60)
+      g <- rv$emotions %>% ggplot( aes(x=id, y=rv$emotions[,c(input$var_emotions)], col=rv$emotions[,c(input$var_emotions)])) + 
+        geom_point(aes(text = str_glue("<b>id</b>: {id}
+                                        <b>Text:</b> {label_wrap(text)}"))) + 
+        geom_smooth(method = "loess", color = "cornflowerblue") + 
+        scale_color_viridis(option="plasma")
+      
+      ggplotly(g)
+    
+    })
+    
   })
+  
   
   # Plotly common nouns ----
   
-  output$plotly_nouns <- renderPlotly({
-    
-    stats_nouns <- subset(rv$annotations_with_group, upos %in% c("NOUN"))
-    stats_nouns <- filter(stats_nouns, group %in% input$var_categories_2)
-    stats_nouns <- txt_freq(stats_nouns$lemma)
-    stats_nouns$key <- factor(stats_nouns$key, levels = rev(stats_nouns$key))
-    
-    g <- stats_nouns %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
-      geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
-      coord_flip() +
-      xlab("") +
-      theme_bw()
-    
-    ggplotly(g, tooltip = c("key", "freq"))
-    
-  })
-  
-  # # Plotly common adjectives ----
-  
-  output$plotly_adjectives <- renderPlotly({
-    
-    #req(rv$stats_filtered)
-    
-    stats_adjectives <- subset(rv$annotations_with_group, upos %in% c("ADJ"))
-    stats_adjectives <- filter(stats_adjectives, group %in% input$var_categories_2)
-    stats_adjectives <- txt_freq(stats_adjectives$lemma)
-    stats_adjectives$key <- factor(stats_adjectives$key, levels = rev(stats_adjectives$key))
-    
-    g <- stats_adjectives %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
-      geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
-      coord_flip() +
-      xlab("") +
-      theme_bw()
-    
-    ggplotly(g, tooltip = c("key", "freq"))
-  })
-  
-  # # Plotly common verbs ----
-  
-  output$plotly_verbs <- renderPlotly({
-    
-    #req(rv$stats_filtered)
-    
-    stats_verbs <- subset(rv$annotations_with_group, upos %in% c("VERB"))
-    stats_verbs <- filter(stats_verbs, group %in% input$var_categories_2)
-    stats_verbs <- txt_freq(stats_verbs$lemma)
-    stats_verbs$key <- factor(stats_verbs$key, levels = rev(stats_verbs$key))
-    
-    g <- stats_verbs %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
-      geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
-      coord_flip() +
-      xlab("") +
-      theme_bw()
-    
-    ggplotly(g, tooltip = c("key", "freq"))
-  })
-  # 
-  # # Plot interactive words connections ----
-  # # Render word graph
   observeEvent(input$var_categories_2, {
+    
+    output$plotly_nouns <- renderPlotly({
+      
+      stats_nouns <- subset(rv$annotations_with_group, upos %in% c("NOUN"))
+      stats_nouns <- filter(stats_nouns, group %in% input$var_categories_2)
+      stats_nouns <- txt_freq(stats_nouns$lemma)
+      stats_nouns$key <- factor(stats_nouns$key, levels = rev(stats_nouns$key))
+      
+      g <- stats_nouns %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
+        geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+        coord_flip() +
+        xlab("") +
+        theme_bw()
+      
+      ggplotly(g, tooltip = c("key", "freq"))
+      
+    })
+    
+    # # Plotly common adjectives ----
+    
+    output$plotly_adjectives <- renderPlotly({
+      
+      #req(rv$stats_filtered)
+      
+      stats_adjectives <- subset(rv$annotations_with_group, upos %in% c("ADJ"))
+      stats_adjectives <- filter(stats_adjectives, group %in% input$var_categories_2)
+      stats_adjectives <- txt_freq(stats_adjectives$lemma)
+      stats_adjectives$key <- factor(stats_adjectives$key, levels = rev(stats_adjectives$key))
+      
+      g <- stats_adjectives %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
+        geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+        coord_flip() +
+        xlab("") +
+        theme_bw()
+      
+      ggplotly(g, tooltip = c("key", "freq"))
+    })
+    
+    # # Plotly common verbs ----
+    
+    output$plotly_verbs <- renderPlotly({
+      
+      stats_verbs <- subset(rv$annotations_with_group, upos %in% c("VERB"))
+      stats_verbs <- filter(stats_verbs, group %in% input$var_categories_2)
+      stats_verbs <- txt_freq(stats_verbs$lemma)
+      stats_verbs$key <- factor(stats_verbs$key, levels = rev(stats_verbs$key))
+      
+      g <- stats_verbs %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
+        geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+        coord_flip() +
+        xlab("") +
+        theme_bw()
+      
+      ggplotly(g, tooltip = c("key", "freq"))
+    })
+    
+    
+    # Plot interactive words connections ----
     
     rv$filtered_annotations <- filter(rv$annotations_with_group, group %in% input$var_categories_2)
     rv$cooc <- cooccurrence(x=subset(rv$filtered_annotations, upos %in% c('NOUN', 'ADJ')),
