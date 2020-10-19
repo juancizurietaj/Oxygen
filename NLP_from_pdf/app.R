@@ -6,6 +6,7 @@ library(shinyWidgets)
 library(shinydashboard)
 library(shinydashboardPlus)
 library(shinycssloaders)
+library(shinyalert)
 
 # Sentiment
 library(syuzhet)
@@ -65,19 +66,14 @@ sidebar <- dashboardSidebar(
   
   sidebarMenu(
     menuItem(
-      text= "Data"
-      ,tabName = "data"
-      ,icon = icon("database")
-    )
-    ,menuItem(
-      text= "Sentiment analysis"
-      ,tabName = "sentiment"
-      ,icon = icon("heart")
-    )
-    ,menuItem(
-      text = "Natural Language Processing"
+      text= "NLP and sentiment analysis"
       ,tabName = "nlp"
       ,icon = icon("comment")
+    )
+    ,menuItem(
+      text = "Other Oxygen ML tools"
+      ,tabName = "tools"
+      ,icon = icon("wrench")
     )
   )
 )
@@ -98,7 +94,7 @@ body <- dashboardBody(
     ##############
     
     tabItem(
-      tabName = "data"
+      tabName = "nlp"
       ,fluidRow(
         
         boxPlus(title = "Upload and select data",
@@ -121,32 +117,17 @@ body <- dashboardBody(
                 
                 # ---- Submit for analysis
                 actionButton(inputId = "analyze", "Analyze", class = "btn-primary", style="color: #ffff; background-color: #41585D; border-color: #404040")
-        )
-        
-      )
-    ),
-    
-    ##############
-    ### PAGE 2 ###
-    ##############
-    
-    tabItem(
-      tabName = "sentiment",
-      fluidRow(
+        ),
         
         boxPlus(
-          title = "Pages preview",
+          title = "Pages selection",
           width = 12,
-          height = "1000px",
-          status = "success",
+          status = "info",
           style= "background-color: #F6F6F6",
           closable = F,
-          collapsible = F,
-          
-          # Pages preview
-          uiOutput("page_controls"),
-          imageOutput("img_pdf", width = "80%", height = "600px") %>% withSpinner(color = "#41585D")
-          
+          collapsible = T,
+          HTML('Please select pages to show results'),
+          uiOutput('picker')
           
         ),
         
@@ -157,12 +138,6 @@ body <- dashboardBody(
           style= "background-color: #F6F6F6",
           closable = F,
           collapsible = T,
-          
-          
-          # ---- Pages selection
-          HTML('Please select pages'),
-          uiOutput('picker'),
-          hr(),
           
           
           # ---- Texts sentiment plot
@@ -203,31 +178,6 @@ body <- dashboardBody(
             selectInput(inputId = "var_emotions", choices = c("anger", "anticipation", "disgust", "fear", "joy", "sadness", "surprise", "trust", "negative", "positive"),"", ""),
             div(class = "panel-body", plotlyOutput(outputId = "plotly_emotions", height = 400) %>% withSpinner(color = "#41585D"))
           )
-        )
-        
-      )
-    ),
-    
-    ##############
-    ### PAGE 3 ###
-    ##############
-    
-    tabItem(
-      tabName = "nlp",
-      fluidRow(
-        
-        boxPlus(
-          title = "Page selection",
-          width = 12,
-          status = "success",
-          style= "background-color: #F6F6F6",
-          closable = F,
-          collapsible = F,
-          
-          # ---- Values selection
-          HTML('Please select pages'),
-          uiOutput('picker2'),
-          hr()
         ),
         
         boxPlus(
@@ -264,6 +214,44 @@ body <- dashboardBody(
         )
       )
     )
+    
+    
+    ##############
+    ### PAGE 2 ###
+    ##############
+    
+    ,tabItem(
+      tabName = "tools",
+      fluidRow(
+        widgetUserBox(
+          width = 12,
+          type = 2,
+          subtitle = "Automated machine learning tool",
+          background = F,
+          src = "https://www.flaticon.com/svg/static/icons/svg/305/305098.svg",
+          color = "gray",
+          a("Go to the app", href="https://manu-am.shinyapps.io/Oxygen-ML/")
+        ),
+        widgetUserBox(
+          width = 12,
+          type = 2,
+          subtitle = "NLP & sentiment analysis from Twitter",
+          background = F,
+          src = "https://www.flaticon.com/svg/static/icons/svg/733/733579.svg",
+          color = "gray",
+          a("Go to the app", href="https://juan-izurieta.shinyapps.io/NLP_from_Twitter/")
+        ),
+        widgetUserBox(
+          width = 12,
+          type = 2,
+          subtitle = "NLP & sentiment analysis from csv or xls files",
+          background = F,
+          src = "https://www.flaticon.com/svg/static/icons/svg/180/180855.svg",
+          color = "gray",
+          a("Go to the app", href="https://juan-izurieta.shinyapps.io/NLP_from_files")
+        )
+      )
+    )
   )
 )
 
@@ -276,7 +264,8 @@ ui <- dashboardPagePlus(
   header, 
   sidebar, 
   body, 
-  skin = "black"
+  skin = "black",
+  useShinyalert()
 )
 
 
@@ -286,9 +275,32 @@ ui <- dashboardPagePlus(
 
 server <- function(input, output, session) {
   
+  # Start instructions:
+  shinyalert(
+    title = "Welcome",
+    text = str_glue("<b>HOW TO USE THE TOOL:</b><br>", 
+                    "<br>",
+                    "<b>Select a pdf file.</b> Maximum size is 5Mb.</br>",
+                    "<b>Select the analysis language.</b> English and Spanish are supported.<br>", 
+                    "<b>Click 'Analize'</b> and wait for your results."),
+    size = "m", 
+    closeOnEsc = TRUE,
+    closeOnClickOutside = TRUE,
+    html = TRUE,
+    type = "",
+    showConfirmButton = TRUE,
+    showCancelButton = FALSE,
+    confirmButtonText = "Start",
+    confirmButtonCol = "#41585D",
+    timer = 0,
+    imageUrl = "https://drive.google.com/uc?export=view&id=1cCWQwUMmrn7UDG0TvNWjpyjiJFH37wnr", 
+    imageWidth = "200",
+    animation = TRUE
+  )
+  
   # Limit pdf size ----
   
-  options(shiny.maxRequestSize = 10*1024^2)
+  options(shiny.maxRequestSize = 5*1024^2)
   
   # Setup Reactive Values ----
   rv <- reactiveValues()
@@ -334,11 +346,6 @@ server <- function(input, output, session) {
       pickerInput('var_categories', choices = choices, multiple = TRUE, options = list('actions-box' = TRUE))
     })
     
-    output$picker2 <- renderUI({
-      choices <- reactiveCategories2()
-      pickerInput('var_categories_2', choices = choices, multiple = TRUE, options = list('actions-box' = TRUE))
-    })
-    
     
   })
   
@@ -346,6 +353,23 @@ server <- function(input, output, session) {
   # Prepare data after selections ----
   
   observeEvent(input$analyze, {
+    
+    shinyalert(
+      title = "Analyzing your texts",
+      text = "Please wait, we'll let you know when results are ready.",
+      size = "m", 
+      closeOnEsc = TRUE,
+      closeOnClickOutside = TRUE,
+      html = TRUE,
+      type = "",
+      showConfirmButton = FALSE,
+      showCancelButton = FALSE,
+      timer = 0,
+      imageUrl = "https://drive.google.com/uc?export=view&id=1StE42A3JStLVe4Rn-5eI-1E-WOkFGppc", 
+      imageWidth = "200",
+      animation = F,
+      immediate = T
+    )
     
     req(rv$paragraph_text_tbl)
     
@@ -425,206 +449,187 @@ server <- function(input, output, session) {
     rv$emotions$paragraph_num <- rv$selected_data$paragraph_num
     rv$emotions <- left_join(rv$emotions, select(rv$selected_data, c(paragraph_num, paragraph_text)), by='paragraph_num')
     
+    # Ready message:
+    shinyalert(
+      title = "Ready!",
+      text = "Click outside this box, <b>select the pages to analyze</b> and scroll down to check all the results.<br> All progress icons by Jovie Brett Bardoles.",
+      size = "m", 
+      closeOnEsc = TRUE,
+      closeOnClickOutside = TRUE,
+      html = TRUE,
+      type = "",
+      showConfirmButton = FALSE,
+      showCancelButton = FALSE,
+      timer = 0,
+      imageUrl = "https://drive.google.com/uc?export=view&id=12HSqK0UOjC8fly2y4QoXiT-nMJVkID0E", 
+      animation = F,
+      immediate = T
+    )
     
-  })
-  
-  
-  
-  # Render PDF Images ----
-  output$img_pdf <- renderImage(deleteFile = T,{
-    
-    req(rv$pdf)
-    
-    # Get page num
-    page_num <- input$page_num
-    
-    # Read PDF Images
-    rv$img_data <- image_read_pdf(rv$pdf$datapath, pages = page_num)
-    
-    tmpfile <- rv$img_data %>% 
-      image_scale("400") %>%
-      image_write(tempfile(fileext='jpg'), format = 'jpg')
-    
-    # Return a list
-    list(src = tmpfile, contentType = "image/jpeg")
-  })
-  
-  # Render PDF Viewer Controls -----
-  output$page_controls <- renderUI({
-    
-    req(rv$pdf)
-    
-    n_max <- pdf_length(rv$pdf$datapath)
-    
-    shiny::sliderInput(
-      "page_num", 
-      label = NULL, 
-      value = 1, min = 1, max = n_max, step = 1, 
-      width = "100%")
     
   })
   
   
   # Plotly sentiments ----
+  observeEvent(input$var_categories, {
+    
+    output$plotly_sentiment <- renderPlotly({
+      
+      req(rv$sentiments)
+      
+      label_wrap <- label_wrap_gen(width = 60)
+      
+      rv$filtered_sentiment <- filter(rv$sentiments, page %in% input$var_categories)
+      
+      g <- ggplot(rv$filtered_sentiment, aes(x=paragraph_num, y=ave_sentiment, size = abs(ave_sentiment), color = ave_sentiment)) +
+        geom_point(alpha=0.9, aes(text = str_glue("<b>Paragraph number</b>: {paragraph_num}
+                                                  <b>Average sentiment:</b> {ave_sentiment}
+                                                  <b>Text:</b> {label_wrap(text)}"))) + 
+        geom_hline(aes(yintercept = mean(ave_sentiment)), color = "black") +
+        geom_hline(aes(yintercept = median(ave_sentiment) + 1.96*IQR(ave_sentiment)), color = "#ffd633") +
+        geom_hline(aes(yintercept = median(ave_sentiment) - 1.96*IQR(ave_sentiment)), color = "#600080") +
+        scale_size(range = c(.2, 8)) +
+        scale_color_viridis(option="plasma") +
+        theme_ipsum() +
+        theme(legend.position = "bottom") +
+        ylab("Average sentiment of text") +
+        xlab("Texts")
+      
+      ggplotly(g, tooltip = "text")
+      
+    })
+    
+    # Polarity bar plot ----
+    
+    output$plotly_bars <- renderPlotly({
   
-  output$plotly_sentiment <- renderPlotly({
-    
-    req(rv$sentiments)
-    
-    label_wrap <- label_wrap_gen(width = 60)
-    
-    rv$filtered_sentiment <- filter(rv$sentiments, page %in% input$var_categories)
-    
-    g <- ggplot(rv$filtered_sentiment, aes(x=paragraph_num, y=ave_sentiment, size = abs(ave_sentiment), color = ave_sentiment)) +
-      geom_point(alpha=0.9, aes(text = str_glue("<b>Paragraph number</b>: {paragraph_num}
-                                                <b>Average sentiment:</b> {ave_sentiment}
-                                                <b>Text:</b> {label_wrap(text)}"))) + 
-      geom_hline(aes(yintercept = mean(ave_sentiment)), color = "black") +
-      geom_hline(aes(yintercept = median(ave_sentiment) + 1.96*IQR(ave_sentiment)), color = "#ffd633") +
-      geom_hline(aes(yintercept = median(ave_sentiment) - 1.96*IQR(ave_sentiment)), color = "#600080") +
-      scale_size(range = c(.2, 8)) +
-      scale_color_viridis(option="plasma") +
-      theme_ipsum() +
-      theme(legend.position = "bottom") +
-      ylab("Average sentiment of text") +
-      xlab("Texts")
-    
-    ggplotly(g, tooltip = "text")
-    
-  })
+      req(rv$polarity)
   
-  # Polarity bar plot ----
+      rv$filtered_polarity <- filter(rv$polarity, page %in% input$var_categories)
   
-  output$plotly_bars <- renderPlotly({
-
-    req(rv$polarity)
-
-    rv$filtered_polarity <- filter(rv$polarity, page %in% input$var_categories)
-
-    g <- rv$filtered_polarity %>% ggplot( aes(x=polarity, y=count, fill=polarity)) +
-      geom_bar(stat="identity") + coord_flip() +
-      scale_fill_viridis(discrete=T, option="plasma") +
-      theme_ipsum() +
-      theme(legend.position = "none") +
-      ylab("Number of texts") +
-      xlab("Polarity category")
-
-    ggplotly(g)
-  })
-  # 
-  # # Plotly sentiments polarity violin -----
-  # 
-  output$plotly_violin <- renderPlotly({
-
-    req(rv$filtered_sentiment)
-
-    g <- rv$filtered_sentiment %>% filter(polarity != 'Neutral') %>%
-      ggplot( aes(x=polarity, y=ave_sentiment, fill=polarity)) +
-      geom_violin() +
-      scale_fill_viridis(discrete=T, option="plasma") +
-      theme_ipsum() +
-      theme(legend.position = "none") +
-      ylab("Average sentiment of texts") +
-      xlab("Polarity category")
-
-    ggplotly(g)
-
-  })
-   
-  # # Plotly emotions ----
-   
-  output$plotly_emotions <- renderPlotly({
-
-    req(rv$emotions)
-
-    label_wrap <- label_wrap_gen(width = 60)
-    g <- rv$emotions %>% ggplot( aes(x=paragraph_num, y=rv$emotions[,c(input$var_emotions)], col=rv$emotions[,c(input$var_emotions)])) +
-      geom_point(aes(text = str_glue("<b>Paragraph</b>: {paragraph_num}
-                                      <b>Text:</b> {label_wrap(paragraph_text)}"))) +
-      geom_smooth(method = "loess", color = "cornflowerblue") +
-      scale_color_viridis(option="plasma")
-
-    ggplotly(g, tooltip = "text")
-
-  })
-   
-  # # Plotly common nouns ----
-   
-  output$plotly_nouns <- renderPlotly({
-
-    stats_nouns <- subset(rv$annotations_with_group, upos %in% c("NOUN"))
-    stats_nouns <- filter(stats_nouns, page_num %in% input$var_categories_2)
-    stats_nouns <- txt_freq(stats_nouns$lemma)
-    stats_nouns$key <- factor(stats_nouns$key, levels = rev(stats_nouns$key))
-
-    g <- stats_nouns %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
-      geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
-      coord_flip() +
-      xlab("") +
-      theme_bw()
-
-    ggplotly(g, tooltip = c("key", "freq"))
-
-  })
-
-  # # # Plotly common adjectives ----
-
-  output$plotly_adjectives <- renderPlotly({
-
-    stats_adjectives <- subset(rv$annotations_with_group, upos %in% c("ADJ"))
-    stats_adjectives <- filter(stats_adjectives, page_num %in% input$var_categories_2)
-    stats_adjectives <- txt_freq(stats_adjectives$lemma)
-    stats_adjectives$key <- factor(stats_adjectives$key, levels = rev(stats_adjectives$key))
-
-    g <- stats_adjectives %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
-      geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
-      coord_flip() +
-      xlab("") +
-      theme_bw()
-
-    ggplotly(g, tooltip = c("key", "freq"))
-  })
-
-  # # # Plotly common verbs ----
-
-  output$plotly_verbs <- renderPlotly({
-
-    stats_verbs <- subset(rv$annotations_with_group, upos %in% c("VERB"))
-    stats_verbs <- filter(stats_verbs, page_num %in% input$var_categories_2)
-    stats_verbs <- txt_freq(stats_verbs$lemma)
-    stats_verbs$key <- factor(stats_verbs$key, levels = rev(stats_verbs$key))
-
-    g <- stats_verbs %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
-      geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
-      coord_flip() +
-      xlab("") +
-      theme_bw()
-
-    ggplotly(g, tooltip = c("key", "freq"))
-  })
+      g <- rv$filtered_polarity %>% ggplot( aes(x=polarity, y=count, fill=polarity)) +
+        geom_bar(stat="identity") + coord_flip() +
+        scale_fill_viridis(discrete=T, option="plasma") +
+        theme_ipsum() +
+        theme(legend.position = "none") +
+        ylab("Number of texts") +
+        xlab("Polarity category")
   
-  # Plot interactive words connections ----
-
-  observeEvent(input$var_categories_2, {
-
-    rv$filtered_annotations <- filter(rv$annotations_with_group, page_num %in% input$var_categories_2)
+      ggplotly(g)
+    })
+    # 
+    # # Plotly sentiments polarity violin -----
+    # 
+    output$plotly_violin <- renderPlotly({
+  
+      req(rv$filtered_sentiment)
+  
+      g <- rv$filtered_sentiment %>% filter(polarity != 'Neutral') %>%
+        ggplot( aes(x=polarity, y=ave_sentiment, fill=polarity)) +
+        geom_violin() +
+        scale_fill_viridis(discrete=T, option="plasma") +
+        theme_ipsum() +
+        theme(legend.position = "none") +
+        ylab("Average sentiment of texts") +
+        xlab("Polarity category")
+  
+      ggplotly(g)
+  
+    })
+     
+    # # Plotly emotions ----
+     
+    output$plotly_emotions <- renderPlotly({
+    
+      req(rv$emotions)
+    
+      label_wrap <- label_wrap_gen(width = 60)
+      g <- rv$emotions %>% ggplot( aes(x=paragraph_num, y=rv$emotions[,c(input$var_emotions)], col=rv$emotions[,c(input$var_emotions)])) +
+        geom_point(aes(text = str_glue("<b>Paragraph</b>: {paragraph_num}
+                                        <b>Text:</b> {label_wrap(paragraph_text)}"))) +
+        geom_smooth(method = "loess", color = "cornflowerblue") +
+        scale_color_viridis(option="plasma")
+    
+      ggplotly(g, tooltip = "text")
+    
+    })
+     
+    # # Plotly common nouns ----
+     
+    output$plotly_nouns <- renderPlotly({
+    
+      stats_nouns <- subset(rv$annotations_with_group, upos %in% c("NOUN"))
+      stats_nouns <- filter(stats_nouns, page_num %in% input$var_categories)
+      stats_nouns <- txt_freq(stats_nouns$lemma)
+      stats_nouns$key <- factor(stats_nouns$key, levels = rev(stats_nouns$key))
+    
+      g <- stats_nouns %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
+        geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+        coord_flip() +
+        xlab("") +
+        theme_bw()
+    
+      ggplotly(g, tooltip = c("key", "freq"))
+    
+    })
+    
+    # # # Plotly common adjectives ----
+    
+    output$plotly_adjectives <- renderPlotly({
+    
+      stats_adjectives <- subset(rv$annotations_with_group, upos %in% c("ADJ"))
+      stats_adjectives <- filter(stats_adjectives, page_num %in% input$var_categories)
+      stats_adjectives <- txt_freq(stats_adjectives$lemma)
+      stats_adjectives$key <- factor(stats_adjectives$key, levels = rev(stats_adjectives$key))
+    
+      g <- stats_adjectives %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
+        geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+        coord_flip() +
+        xlab("") +
+        theme_bw()
+    
+      ggplotly(g, tooltip = c("key", "freq"))
+    })
+    
+    # # # Plotly common verbs ----
+    
+    output$plotly_verbs <- renderPlotly({
+    
+      stats_verbs <- subset(rv$annotations_with_group, upos %in% c("VERB"))
+      stats_verbs <- filter(stats_verbs, page_num %in% input$var_categories)
+      stats_verbs <- txt_freq(stats_verbs$lemma)
+      stats_verbs$key <- factor(stats_verbs$key, levels = rev(stats_verbs$key))
+  
+      g <- stats_verbs %>% top_n(input$num_words) %>% ggplot( aes(x=key, y=freq)) +
+        geom_bar(stat="identity", fill="#69b3a2", alpha=.6, width=.4) +
+        coord_flip() +
+        xlab("") +
+        theme_bw()
+    
+      ggplotly(g, tooltip = c("key", "freq"))
+    })
+    
+    # Plot interactive words connections ----
+    
+    
+    rv$filtered_annotations <- filter(rv$annotations_with_group, page_num %in% input$var_categories)
     rv$cooc <- cooccurrence(x=subset(rv$filtered_annotations, upos %in% c('NOUN', 'ADJ')),
                             term = "lemma",
                             group = c('doc_id', 'paragraph_id', 'sentence_id'),
                             skipgram = 3,
                             relevant = T
     )
-
+    
     output$graphos <- renderSimpleNetwork({
-
+    
       connections <- data.frame(from=rv$cooc$term1, to=rv$cooc$term2, cooc=rv$cooc$cooc)
-
+    
       if(input$search_term == ""){
         connections <- connections
       } else{
         connections <- connections %>% filter_all(any_vars(. %in% input$search_term))
       }
-
+    
       grapho <- connections %>% arrange(desc(cooc)) %>% top_n(input$words_connections)
       p <- simpleNetwork(grapho,
                          height="500px",
@@ -637,7 +642,7 @@ server <- function(input, output, session) {
                          zoom = T)
       p
     })
-
+    
   })
   
   
